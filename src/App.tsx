@@ -59,29 +59,30 @@ function App() {
     }
   }, [costPerMD, loading])
 
+  // Track if invoicedTotal was manually edited
+  const [invoicedTotalManuallyEdited, setInvoicedTotalManuallyEdited] = useState(false)
+
   // Auto-calculate Invoiced Total when MDs and MD Rate are entered
   useEffect(() => {
-    const mds = parseFloat(numberOfMDs)
-    const rate = parseFloat(mdRate)
+    const mds = parseFloat(numberOfMDs) || 0
+    const rate = parseFloat(mdRate) || 0
     
     if (mds > 0 && rate > 0) {
       const calculatedTotal = (mds * rate).toFixed(2)
-      const currentTotal = parseFloat(invoicedTotal)
-      const expectedTotal = mds * rate
+      const currentTotal = parseFloat(invoicedTotal) || 0
       
-      // Auto-fill if invoicedTotal is empty, or if it matches the previous calculation
-      // This allows manual override while still auto-calculating when MDs/Rate change
-      if (!invoicedTotal || invoicedTotal === '' || Math.abs(currentTotal - expectedTotal) < 0.01) {
+      // Auto-fill if:
+      // 1. invoicedTotal is empty/zero, OR
+      // 2. It matches the calculated value (was previously auto-calculated), OR
+      // 3. It hasn't been manually edited
+      if (!invoicedTotal || invoicedTotal === '' || currentTotal === 0 || 
+          Math.abs(currentTotal - parseFloat(calculatedTotal)) < 0.01 || 
+          !invoicedTotalManuallyEdited) {
         setInvoicedTotal(calculatedTotal)
-      }
-    } else if ((!numberOfMDs || numberOfMDs === '') && (!mdRate || mdRate === '')) {
-      // Clear invoicedTotal if both MDs and Rate are cleared
-      if (invoicedTotal && parseFloat(invoicedTotal) > 0) {
-        // Only clear if it looks like it was auto-calculated (matches a calculation)
-        // Otherwise, keep it for manual entries
+        setInvoicedTotalManuallyEdited(false)
       }
     }
-  }, [numberOfMDs, mdRate]) // Note: intentionally not including invoicedTotal to avoid loops
+  }, [numberOfMDs, mdRate])
 
   // Calculate cost
   const calculateCost = (): number => {
@@ -156,6 +157,7 @@ function App() {
     setCurrency('CZK')
     setExchangeRate('')
     setProvisionPercent(null)
+    setInvoicedTotalManuallyEdited(false)
   }
 
   // Load project for editing
