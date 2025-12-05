@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react'
 import * as api from './services/api'
-import type { SavedProject } from './services/api'
+import type { SavedProject, User } from './services/api'
+import { useAuth } from './contexts/AuthContext'
+import Login from './components/Login'
 import {
   LineChart,
   Line,
@@ -18,13 +20,17 @@ import {
 } from 'recharts'
 
 type Currency = 'CZK' | 'EUR'
-type View = 'calculator' | 'list' | 'overview'
+type View = 'calculator' | 'list' | 'overview' | 'users' | 'settings'
 
 function App() {
+  const { user, loading: authLoading, logout, canManageUsers, canManageProvision } = useAuth()
   const [view, setView] = useState<View>('calculator')
   const [editingId, setEditingId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  
+  // Provision percentages state
+  const [provisionPercentages, setProvisionPercentages] = useState<number[]>([10, 15])
   
   // Calculator form state
   const [projectName, setProjectName] = useState('')
@@ -34,13 +40,15 @@ function App() {
   const [currency, setCurrency] = useState<Currency>('CZK')
   const [exchangeRate, setExchangeRate] = useState('')
   const [costPerMD, setCostPerMD] = useState('5000')
-  const [provisionPercent, setProvisionPercent] = useState<10 | 15 | null>(null)
+  const [provisionPercent, setProvisionPercent] = useState<number | null>(null)
 
   // Saved projects state
   const [savedProjects, setSavedProjects] = useState<SavedProject[]>([])
 
   // Load initial data from API
   useEffect(() => {
+    if (!user) return
+    
     const loadData = async () => {
       try {
         setLoading(true)
@@ -49,6 +57,10 @@ function App() {
         // Load cost per MD setting
         const costPerMDValue = await api.getCostPerMD()
         setCostPerMD(costPerMDValue)
+        
+        // Load provision percentages
+        const percentages = await api.getProvisionPercentages()
+        setProvisionPercentages(percentages)
         
         // Load projects
         const projects = await api.getProjects()
@@ -62,7 +74,7 @@ function App() {
     }
     
     loadData()
-  }, [])
+  }, [user])
 
   // Save costPerMD to API when it changes
   useEffect(() => {
@@ -265,6 +277,22 @@ function App() {
     }
   }
 
+  // Show login if not authenticated
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading...</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (!user) {
+    return <Login />
+  }
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center">
@@ -293,41 +321,82 @@ function App() {
         )}
 
         {/* Navigation */}
-        <div className="mb-6 flex gap-4 justify-center">
-          <button
-            onClick={() => {
-              setView('calculator')
-              if (!editingId) resetForm()
-              setEditingId(null)
-            }}
-            className={`px-6 py-2 rounded-lg font-medium transition-colors ${
-              view === 'calculator'
-                ? 'bg-indigo-600 text-white'
-                : 'bg-white text-gray-700 hover:bg-gray-50'
-            }`}
-          >
-            Calculator
-          </button>
-          <button
-            onClick={() => setView('list')}
-            className={`px-6 py-2 rounded-lg font-medium transition-colors ${
-              view === 'list'
-                ? 'bg-indigo-600 text-white'
-                : 'bg-white text-gray-700 hover:bg-gray-50'
-            }`}
-          >
-            Payable Commissions ({savedProjects.length})
-          </button>
-          <button
-            onClick={() => setView('overview')}
-            className={`px-6 py-2 rounded-lg font-medium transition-colors ${
-              view === 'overview'
-                ? 'bg-indigo-600 text-white'
-                : 'bg-white text-gray-700 hover:bg-gray-50'
-            }`}
-          >
-            Overview
-          </button>
+        <div className="mb-6">
+          <div className="flex justify-between items-center mb-4">
+            <div className="flex gap-2 items-center">
+              <span className="text-sm text-gray-600">Logged in as:</span>
+              <span className="text-sm font-semibold text-gray-800">{user.name}</span>
+              <span className="text-xs px-2 py-1 bg-indigo-100 text-indigo-800 rounded">
+                {user.role}
+              </span>
+            </div>
+            <button
+              onClick={logout}
+              className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors text-sm"
+            >
+              Logout
+            </button>
+          </div>
+          <div className="flex gap-4 justify-center flex-wrap">
+            <button
+              onClick={() => {
+                setView('calculator')
+                if (!editingId) resetForm()
+                setEditingId(null)
+              }}
+              className={`px-6 py-2 rounded-lg font-medium transition-colors ${
+                view === 'calculator'
+                  ? 'bg-indigo-600 text-white'
+                  : 'bg-white text-gray-700 hover:bg-gray-50'
+              }`}
+            >
+              Calculator
+            </button>
+            <button
+              onClick={() => setView('list')}
+              className={`px-6 py-2 rounded-lg font-medium transition-colors ${
+                view === 'list'
+                  ? 'bg-indigo-600 text-white'
+                  : 'bg-white text-gray-700 hover:bg-gray-50'
+              }`}
+            >
+              Payable Commissions ({savedProjects.length})
+            </button>
+            <button
+              onClick={() => setView('overview')}
+              className={`px-6 py-2 rounded-lg font-medium transition-colors ${
+                view === 'overview'
+                  ? 'bg-indigo-600 text-white'
+                  : 'bg-white text-gray-700 hover:bg-gray-50'
+              }`}
+            >
+              Overview
+            </button>
+            {canManageUsers() && (
+              <button
+                onClick={() => setView('users')}
+                className={`px-6 py-2 rounded-lg font-medium transition-colors ${
+                  view === 'users'
+                    ? 'bg-indigo-600 text-white'
+                    : 'bg-white text-gray-700 hover:bg-gray-50'
+                }`}
+              >
+                Users
+              </button>
+            )}
+            {canManageProvision() && (
+              <button
+                onClick={() => setView('settings')}
+                className={`px-6 py-2 rounded-lg font-medium transition-colors ${
+                  view === 'settings'
+                    ? 'bg-indigo-600 text-white'
+                    : 'bg-white text-gray-700 hover:bg-gray-50'
+                }`}
+              >
+                Settings
+              </button>
+            )}
+          </div>
         </div>
 
         {view === 'calculator' ? (
@@ -472,27 +541,19 @@ function App() {
                 <label className="block text-sm font-medium text-gray-700 mb-3">
                   Provision Percentage
                 </label>
-                <div className="flex gap-4">
-                  <label className="flex items-center cursor-pointer">
-                    <input
-                      type="radio"
-                      name="provision"
-                      checked={provisionPercent === 10}
-                      onChange={() => setProvisionPercent(10)}
-                      className="mr-2 w-5 h-5 text-indigo-600 focus:ring-indigo-500"
-                    />
-                    <span className="text-gray-700 text-lg font-medium">10%</span>
-                  </label>
-                  <label className="flex items-center cursor-pointer">
-                    <input
-                      type="radio"
-                      name="provision"
-                      checked={provisionPercent === 15}
-                      onChange={() => setProvisionPercent(15)}
-                      className="mr-2 w-5 h-5 text-indigo-600 focus:ring-indigo-500"
-                    />
-                    <span className="text-gray-700 text-lg font-medium">15%</span>
-                  </label>
+                <div className="flex gap-4 flex-wrap">
+                  {provisionPercentages.map((percent) => (
+                    <label key={percent} className="flex items-center cursor-pointer">
+                      <input
+                        type="radio"
+                        name="provision"
+                        checked={provisionPercent === percent}
+                        onChange={() => setProvisionPercent(percent)}
+                        className="mr-2 w-5 h-5 text-indigo-600 focus:ring-indigo-500"
+                      />
+                      <span className="text-gray-700 text-lg font-medium">{percent}%</span>
+                    </label>
+                  ))}
                 </div>
               </div>
 
@@ -848,20 +909,12 @@ function App() {
                           <ResponsiveContainer width="100%" height={300}>
                             <PieChart>
                               <Pie
-                                data={[
-                                  {
-                                    name: '10% Provision',
-                                    value: savedProjects
-                                      .filter(p => p.provisionPercent === 10)
-                                      .reduce((sum, p) => sum + p.provision, 0)
-                                  },
-                                  {
-                                    name: '15% Provision',
-                                    value: savedProjects
-                                      .filter(p => p.provisionPercent === 15)
-                                      .reduce((sum, p) => sum + p.provision, 0)
-                                  }
-                                ]}
+                                data={provisionPercentages.map(percent => ({
+                                  name: `${percent}% Provision`,
+                                  value: savedProjects
+                                    .filter(p => p.provisionPercent === percent)
+                                    .reduce((sum, p) => sum + p.provision, 0)
+                                })).filter(item => item.value > 0)}
                                 cx="50%"
                                 cy="50%"
                                 labelLine={false}
@@ -872,8 +925,10 @@ function App() {
                                 fill="#8884d8"
                                 dataKey="value"
                               >
-                                <Cell fill="#10b981" />
-                                <Cell fill="#6366f1" />
+                                {provisionPercentages.map((_, index) => {
+                                  const colors = ['#10b981', '#6366f1', '#8b5cf6', '#ec4899', '#f59e0b']
+                                  return <Cell key={index} fill={colors[index % colors.length]} />
+                                })}
                               </Pie>
                               <Tooltip
                                 formatter={(value: number) =>
@@ -1099,7 +1154,297 @@ function App() {
               )
             })()}
           </div>
+        ) : view === 'users' ? (
+          <UserManagementView />
+        ) : view === 'settings' ? (
+          <SettingsView
+            provisionPercentages={provisionPercentages}
+            setProvisionPercentages={setProvisionPercentages}
+          />
         ) : null}
+      </div>
+    </div>
+  )
+}
+
+// User Management Component (Admin only)
+function UserManagementView() {
+  const [users, setUsers] = useState<User[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [showAddForm, setShowAddForm] = useState(false)
+  const [editingUser, setEditingUser] = useState<User | null>(null)
+  const [formData, setFormData] = useState({
+    email: '',
+    password: '',
+    name: '',
+    role: 'user' as 'admin' | 'teamleader' | 'user'
+  })
+
+  useEffect(() => {
+    loadUsers()
+  }, [])
+
+  const loadUsers = async () => {
+    try {
+      setLoading(true)
+      const usersData = await api.getUsers()
+      setUsers(usersData)
+    } catch (err: any) {
+      setError(err.message || 'Failed to load users')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setError('')
+    try {
+      if (editingUser) {
+        await api.updateUser(editingUser.id, formData)
+      } else {
+        await api.createUser(formData)
+      }
+      setShowAddForm(false)
+      setEditingUser(null)
+      setFormData({ email: '', password: '', name: '', role: 'user' })
+      loadUsers()
+    } catch (err: any) {
+      setError(err.message || 'Failed to save user')
+    }
+  }
+
+  const handleDelete = async (id: string) => {
+    if (!confirm('Are you sure you want to delete this user?')) return
+    try {
+      await api.deleteUser(id)
+      loadUsers()
+    } catch (err: any) {
+      setError(err.message || 'Failed to delete user')
+    }
+  }
+
+  const handleEdit = (user: User) => {
+    setEditingUser(user)
+    setFormData({
+      email: user.email,
+      password: '',
+      name: user.name,
+      role: user.role
+    })
+    setShowAddForm(true)
+  }
+
+  if (loading) {
+    return (
+      <div className="bg-white rounded-lg shadow-xl p-6 md:p-8">
+        <div className="text-center py-12">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading users...</p>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="bg-white rounded-lg shadow-xl p-6 md:p-8">
+      <div className="flex justify-between items-center mb-6">
+        <h1 className="text-3xl font-bold text-gray-800">User Management</h1>
+        <button
+          onClick={() => {
+            setShowAddForm(!showAddForm)
+            setEditingUser(null)
+            setFormData({ email: '', password: '', name: '', role: 'user' })
+          }}
+          className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"
+        >
+          {showAddForm ? 'Cancel' : 'Add User'}
+        </button>
+      </div>
+
+      {error && (
+        <div className="mb-4 bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-lg">
+          {error}
+        </div>
+      )}
+
+      {showAddForm && (
+        <form onSubmit={handleSubmit} className="mb-6 p-4 bg-gray-50 rounded-lg">
+          <h2 className="text-xl font-semibold mb-4">
+            {editingUser ? 'Edit User' : 'Add New User'}
+          </h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Name</label>
+              <input
+                type="text"
+                required
+                value={formData.name}
+                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Email</label>
+              <input
+                type="email"
+                required
+                value={formData.email}
+                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Password {editingUser && '(leave empty to keep current)'}
+              </label>
+              <input
+                type="password"
+                required={!editingUser}
+                value={formData.password}
+                onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Role</label>
+              <select
+                value={formData.role}
+                onChange={(e) => setFormData({ ...formData, role: e.target.value as any })}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg"
+              >
+                <option value="user">User</option>
+                <option value="teamleader">Team Leader</option>
+                <option value="admin">Admin</option>
+              </select>
+            </div>
+          </div>
+          <button
+            type="submit"
+            className="mt-4 px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"
+          >
+            {editingUser ? 'Update User' : 'Create User'}
+          </button>
+        </form>
+      )}
+
+      <div className="space-y-4">
+        {users.map((user) => (
+          <div key={user.id} className="border border-gray-200 rounded-lg p-4">
+            <div className="flex justify-between items-center">
+              <div>
+                <h3 className="font-semibold text-gray-800">{user.name}</h3>
+                <p className="text-sm text-gray-600">{user.email}</p>
+                <span className="text-xs px-2 py-1 bg-indigo-100 text-indigo-800 rounded mt-1 inline-block">
+                  {user.role}
+                </span>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => handleEdit(user)}
+                  className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-sm"
+                >
+                  Edit
+                </button>
+                <button
+                  onClick={() => handleDelete(user.id)}
+                  className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 text-sm"
+                >
+                  Delete
+                </button>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// Settings Component (Team Leader and Admin)
+function SettingsView({
+  provisionPercentages,
+  setProvisionPercentages
+}: {
+  provisionPercentages: number[]
+  setProvisionPercentages: (percentages: number[]) => void
+}) {
+  const [localPercentages, setLocalPercentages] = useState<string>('')
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+  const [success, setSuccess] = useState('')
+
+  useEffect(() => {
+    setLocalPercentages(provisionPercentages.join(', '))
+  }, [provisionPercentages])
+
+  const handleSave = async () => {
+    setError('')
+    setSuccess('')
+    const percentages = localPercentages
+      .split(',')
+      .map(p => parseFloat(p.trim()))
+      .filter(p => !isNaN(p) && p > 0 && p <= 100)
+
+    if (percentages.length === 0) {
+      setError('Please enter at least one valid percentage')
+      return
+    }
+
+    try {
+      setLoading(true)
+      const updated = await api.updateProvisionPercentages(percentages)
+      setProvisionPercentages(updated)
+      setSuccess('Provision percentages updated successfully!')
+    } catch (err: any) {
+      setError(err.message || 'Failed to update provision percentages')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div className="bg-white rounded-lg shadow-xl p-6 md:p-8">
+      <h1 className="text-3xl font-bold text-gray-800 mb-2">Settings</h1>
+      <p className="text-gray-600 mb-6">Manage provision percentages</p>
+
+      {error && (
+        <div className="mb-4 bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-lg">
+          {error}
+        </div>
+      )}
+
+      {success && (
+        <div className="mb-4 bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded-lg">
+          {success}
+        </div>
+      )}
+
+      <div className="space-y-6">
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Provision Percentages (comma-separated, e.g., 10, 15, 20)
+          </label>
+          <input
+            type="text"
+            value={localPercentages}
+            onChange={(e) => setLocalPercentages(e.target.value)}
+            className="w-full px-4 py-2 border border-gray-300 rounded-lg"
+            placeholder="10, 15"
+          />
+          <p className="text-xs text-gray-500 mt-1">
+            Current values: {provisionPercentages.join(', ')}%
+          </p>
+        </div>
+
+        <button
+          onClick={handleSave}
+          disabled={loading}
+          className="px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50"
+        >
+          {loading ? 'Saving...' : 'Save Provision Percentages'}
+        </button>
       </div>
     </div>
   )
