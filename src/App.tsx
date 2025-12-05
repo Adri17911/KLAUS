@@ -542,7 +542,7 @@ function App() {
               </div>
             </div>
           </div>
-        ) : (
+        ) : view === 'list' ? (
           <div className="bg-white rounded-lg shadow-xl p-6 md:p-8">
             <h1 className="text-3xl font-bold text-gray-800 mb-2">Payable Commissions</h1>
             <p className="text-gray-600 mb-6">Manage your saved projects</p>
