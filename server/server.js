@@ -72,10 +72,15 @@ const requireRole = (roles) => {
     if (!session) {
       return res.status(401).json({ error: 'Unauthorized' });
     }
-    if (!roles.includes(session.role)) {
+    // Get user role from users file
+    const user = getUserFromSession(session);
+    if (!user) {
+      return res.status(401).json({ error: 'User not found' });
+    }
+    if (!roles.includes(user.role)) {
       return res.status(403).json({ error: 'Forbidden' });
     }
-    req.user = session;
+    req.user = { ...session, role: user.role };
     next();
   };
 };
