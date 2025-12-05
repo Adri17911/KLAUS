@@ -396,22 +396,77 @@ app.post('/api/settings/cost-per-md', requireAuth, (req, res) => {
   }
 });
 
-// Get all projects (require auth)
+// Get all projects (require auth) - filtered by role
 app.get('/api/projects', requireAuth, (req, res) => {
   const projects = readProjects();
-  res.json(projects);
+  const users = readUsers();
+  let filteredProjects = projects;
+  
+  // Get user role from users file
+  const user = getUserFromSession(getSession(req));
+  if (!user) {
+    return res.status(401).json({ error: 'User not found' });
+  }
+  
+  if (user.role === 'admin') {
+    // Admins see everything
+    filteredProjects = projects;
+  } else if (user.role === 'teamleader') {
+    // Team leaders see their own projects and their team members' projects
+    const teamMemberIds = users
+      .filter(u => u.createdBy === user.id)
+      .map(u => u.id);
+    
+    filteredProjects = projects.filter(p => 
+      p.createdBy === user.id || teamMemberIds.includes(p.createdBy)
+    );
+  } else {
+    // Regular users only see their own projects
+    filteredProjects = projects.filter(p => p.createdBy === user.id);
+  }
+  
+  res.json(filteredProjects);
 });
 
-// Get a single project by ID
+// Get a single project by ID (with permission check)
 app.get('/api/projects/:id', requireAuth, (req, res) => {
   const projects = readProjects();
+  const users = readUsers();
   const project = projects.find(p => p.id === req.params.id);
   
   if (!project) {
     return res.status(404).json({ error: 'Project not found' });
   }
   
-  res.json(project);
+  // Get user role from users file
+  const user = getUserFromSession(getSession(req));
+  if (!user) {
+    return res.status(401).json({ error: 'User not found' });
+  }
+  
+  // Check permissions
+  if (user.role === 'admin') {
+    // Admins can see everything
+    res.json(project);
+  } else if (user.role === 'teamleader') {
+    // Team leaders can see their own projects and their team members' projects
+    const teamMemberIds = users
+      .filter(u => u.createdBy === user.id)
+      .map(u => u.id);
+    
+    if (project.createdBy === user.id || teamMemberIds.includes(project.createdBy)) {
+      res.json(project);
+    } else {
+      res.status(403).json({ error: 'Forbidden' });
+    }
+  } else {
+    // Regular users can only see their own projects
+    if (project.createdBy === user.id) {
+      res.json(project);
+    } else {
+      res.status(403).json({ error: 'Forbidden' });
+    }
+  }
 });
 
 // Create a new project
@@ -455,14 +510,42 @@ app.put('/api/projects/:id', requireAuth, (req, res) => {
   }
 });
 
-// Delete a project
+// Delete a project (with permission check)
 app.delete('/api/projects/:id', requireAuth, (req, res) => {
   const projects = readProjects();
-  const filteredProjects = projects.filter(p => p.id !== req.params.id);
+  const users = readUsers();
+  const project = projects.find(p => p.id === req.params.id);
   
-  if (projects.length === filteredProjects.length) {
+  if (!project) {
     return res.status(404).json({ error: 'Project not found' });
   }
+  
+  // Get user role from users file
+  const user = getUserFromSession(getSession(req));
+  if (!user) {
+    return res.status(401).json({ error: 'User not found' });
+  }
+  
+  // Check permissions
+  if (user.role === 'admin') {
+    // Admins can delete everything
+  } else if (user.role === 'teamleader') {
+    // Team leaders can delete their own projects and their team members' projects
+    const teamMemberIds = users
+      .filter(u => u.createdBy === user.id)
+      .map(u => u.id);
+    
+    if (project.createdBy !== user.id && !teamMemberIds.includes(project.createdBy)) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+  } else {
+    // Regular users can only delete their own projects
+    if (project.createdBy !== user.id) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+  }
+  
+  const filteredProjects = projects.filter(p => p.id !== req.params.id);
   
   if (writeProjects(filteredProjects)) {
     res.json({ success: true });

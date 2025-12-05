@@ -32,6 +32,7 @@ export interface SavedProject {
   paymentReceivedDate: string
   invoiceDueDate: string
   createdAt: string
+  createdBy?: string
 }
 
 export interface User {
