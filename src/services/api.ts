@@ -40,6 +40,8 @@ export interface User {
   name: string
   role: 'admin' | 'teamleader' | 'user'
   createdAt?: string
+  createdBy?: string
+  teamLeaderName?: string
 }
 
 // Auth API

@@ -1156,8 +1156,9 @@ function App() {
   )
 }
 
-// User Management Component (Admin only)
+// User Management Component (Admin and Team Leader)
 function UserManagementView() {
+  const { user: currentUser } = useAuth()
   const [users, setUsers] = useState<User[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -1302,11 +1303,19 @@ function UserManagementView() {
                 value={formData.role}
                 onChange={(e) => setFormData({ ...formData, role: e.target.value as any })}
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg"
+                disabled={currentUser?.role === 'teamleader'} // Team leaders can only create users
               >
                 <option value="user">User</option>
-                <option value="teamleader">Team Leader</option>
-                <option value="admin">Admin</option>
+                {currentUser?.role === 'admin' && (
+                  <>
+                    <option value="teamleader">Team Leader</option>
+                    <option value="admin">Admin</option>
+                  </>
+                )}
               </select>
+              {currentUser?.role === 'teamleader' && (
+                <p className="text-xs text-gray-500 mt-1">Team leaders can only create regular users</p>
+              )}
             </div>
           </div>
           <button
@@ -1325,9 +1334,16 @@ function UserManagementView() {
               <div>
                 <h3 className="font-semibold text-gray-800">{user.name}</h3>
                 <p className="text-sm text-gray-600">{user.email}</p>
-                <span className="text-xs px-2 py-1 bg-indigo-100 text-indigo-800 rounded mt-1 inline-block">
-                  {user.role}
-                </span>
+                <div className="flex gap-2 mt-1 flex-wrap">
+                  <span className="text-xs px-2 py-1 bg-indigo-100 text-indigo-800 rounded capitalize">
+                    {user.role}
+                  </span>
+                  {user.teamLeaderName && (
+                    <span className="text-xs px-2 py-1 bg-blue-100 text-blue-800 rounded">
+                      Team member of {user.teamLeaderName}
+                    </span>
+                  )}
+                </div>
               </div>
               <div className="flex gap-2">
                 <button

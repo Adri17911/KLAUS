@@ -143,7 +143,8 @@ const getUserFromSession = (session) => {
     id: user.id,
     email: user.email,
     name: user.name,
-    role: user.role
+    role: user.role,
+    userId: user.id // Add userId for consistency
   };
 };
 
@@ -195,7 +196,17 @@ app.get('/api/auth/me', requireAuth, (req, res) => {
 // User management endpoints (Admin and Team Leader)
 app.get('/api/users', requireRole(['admin', 'teamleader']), (req, res) => {
   const users = readUsers();
-  const usersWithoutPasswords = users.map(({ passwordHash, ...user }) => user);
+  let filteredUsers = users;
+  
+  // If team leader, only show their team members (users they created) and exclude admins
+  if (req.user.role === 'teamleader') {
+    filteredUsers = users.filter(u => 
+      u.createdBy === req.user.userId && u.role !== 'admin'
+    );
+  }
+  // Admins see all users
+  
+  const usersWithoutPasswords = filteredUsers.map(({ passwordHash, ...user }) => user);
   res.json(usersWithoutPasswords);
 });
 
@@ -215,13 +226,19 @@ app.post('/api/users', requireRole(['admin', 'teamleader']), async (req, res) =>
     return res.status(400).json({ error: 'User already exists' });
   }
   
+  // Get the creator's name for the badge
+  const creator = users.find(u => u.id === req.user.userId);
+  const creatorName = creator ? creator.name : 'Unknown';
+  
   const newUser = {
     id: Date.now().toString(),
     email,
     passwordHash: bcrypt.hashSync(password, 10),
     name,
     role,
-    createdAt: new Date().toISOString()
+    createdAt: new Date().toISOString(),
+    createdBy: req.user.userId, // Track who created this user
+    teamLeaderName: req.user.role === 'teamleader' ? creatorName : undefined // Store team leader name for badge
   };
   
   users.push(newUser);
@@ -264,11 +281,20 @@ app.put('/api/users/:id', requireRole(['admin', 'teamleader']), async (req, res)
 
 app.delete('/api/users/:id', requireRole(['admin', 'teamleader']), (req, res) => {
   const users = readUsers();
-  const filteredUsers = users.filter(u => u.id !== req.params.id);
+  const userToDelete = users.find(u => u.id === req.params.id);
   
-  if (users.length === filteredUsers.length) {
+  if (!userToDelete) {
     return res.status(404).json({ error: 'User not found' });
   }
+  
+  // Team leaders can only delete their own team members
+  if (req.user.role === 'teamleader') {
+    if (userToDelete.createdBy !== req.user.userId) {
+      return res.status(403).json({ error: 'You can only delete your own team members' });
+    }
+  }
+  
+  const filteredUsers = users.filter(u => u.id !== req.params.id);
   
   if (writeUsers(filteredUsers)) {
     res.json({ success: true });
