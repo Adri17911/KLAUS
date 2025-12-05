@@ -192,14 +192,14 @@ app.get('/api/auth/me', requireAuth, (req, res) => {
   res.json(user);
 });
 
-// User management endpoints (Admin only)
-app.get('/api/users', requireRole(['admin']), (req, res) => {
+// User management endpoints (Admin and Team Leader)
+app.get('/api/users', requireRole(['admin', 'teamleader']), (req, res) => {
   const users = readUsers();
   const usersWithoutPasswords = users.map(({ passwordHash, ...user }) => user);
   res.json(usersWithoutPasswords);
 });
 
-app.post('/api/users', requireRole(['admin']), async (req, res) => {
+app.post('/api/users', requireRole(['admin', 'teamleader']), async (req, res) => {
   const { email, password, name, role } = req.body;
   
   if (!email || !password || !name || !role) {
@@ -234,7 +234,7 @@ app.post('/api/users', requireRole(['admin']), async (req, res) => {
   }
 });
 
-app.put('/api/users/:id', requireRole(['admin']), async (req, res) => {
+app.put('/api/users/:id', requireRole(['admin', 'teamleader']), async (req, res) => {
   const { email, password, name, role } = req.body;
   const users = readUsers();
   const index = users.findIndex(u => u.id === req.params.id);
@@ -262,7 +262,7 @@ app.put('/api/users/:id', requireRole(['admin']), async (req, res) => {
   }
 });
 
-app.delete('/api/users/:id', requireRole(['admin']), (req, res) => {
+app.delete('/api/users/:id', requireRole(['admin', 'teamleader']), (req, res) => {
   const users = readUsers();
   const filteredUsers = users.filter(u => u.id !== req.params.id);
   

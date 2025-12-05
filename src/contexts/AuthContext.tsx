@@ -99,7 +99,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const isAdmin = () => user?.role === 'admin'
   const isTeamLeader = () => user?.role === 'teamleader'
-  const canManageUsers = () => user?.role === 'admin'
+  const canManageUsers = () => user?.role === 'admin' || user?.role === 'teamleader'
   const canManageProvision = () => user?.role === 'admin' || user?.role === 'teamleader'
 
   return (
