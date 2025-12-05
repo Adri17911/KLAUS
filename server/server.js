@@ -559,6 +559,52 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok' });
 });
 
+// Migration: Assign existing projects to Adrian Šrajer on first run
+const migrateProjects = () => {
+  try {
+    const users = readUsers();
+    const projects = readProjects();
+    
+    // Find or create Adrian Šrajer
+    let adrian = users.find(u => 
+      u.name.toLowerCase().includes('adrian') || 
+      u.email.toLowerCase().includes('adrian')
+    );
+    
+    if (!adrian) {
+      // Create Adrian Šrajer if doesn't exist
+      adrian = {
+        id: '1',
+        email: 'adrian@klaus.com',
+        passwordHash: bcrypt.hashSync('admin123', 10),
+        name: 'Adrian Šrajer',
+        role: 'admin',
+        createdAt: new Date().toISOString()
+      };
+      users.push(adrian);
+      writeUsers(users);
+      console.log('Created Adrian Šrajer user');
+    }
+    
+    // Assign projects without createdBy to Adrian
+    const projectsToUpdate = projects.filter(p => !p.createdBy);
+    if (projectsToUpdate.length > 0) {
+      projects.forEach(project => {
+        if (!project.createdBy) {
+          project.createdBy = adrian.id;
+        }
+      });
+      writeProjects(projects);
+      console.log(`Assigned ${projectsToUpdate.length} existing projects to ${adrian.name}`);
+    }
+  } catch (error) {
+    console.error('Migration error:', error);
+  }
+};
+
+// Run migration on startup
+migrateProjects();
+
 app.listen(PORT, () => {
   console.log(`KLAUS server running on port ${PORT}`);
   console.log(`Data file: ${DATA_FILE}`);
