@@ -46,6 +46,10 @@ function App() {
   const [savedProjects, setSavedProjects] = useState<SavedProject[]>([])
   const [teamMembers, setTeamMembers] = useState<User[]>([])
   const [selectedTeamMemberFilter, setSelectedTeamMemberFilter] = useState<string>('all')
+  const [searchQuery, setSearchQuery] = useState('')
+  const [dateRangeStart, setDateRangeStart] = useState('')
+  const [dateRangeEnd, setDateRangeEnd] = useState('')
+  const [showArchived, setShowArchived] = useState(false)
 
   // Load initial data from API
   useEffect(() => {
@@ -272,9 +276,35 @@ function App() {
     }
   }
 
-  // Delete project
+  // Archive project
+  const handleArchive = async (id: string) => {
+    try {
+      setError(null)
+      const updatedProject = await api.archiveProject(id)
+      setSavedProjects(savedProjects.map(p => p.id === id ? updatedProject : p))
+    } catch (err) {
+      setError('Failed to archive project')
+      console.error('Error archiving project:', err)
+      alert('Failed to archive project. Please try again.')
+    }
+  }
+
+  // Unarchive project
+  const handleUnarchive = async (id: string) => {
+    try {
+      setError(null)
+      const updatedProject = await api.unarchiveProject(id)
+      setSavedProjects(savedProjects.map(p => p.id === id ? updatedProject : p))
+    } catch (err) {
+      setError('Failed to unarchive project')
+      console.error('Error unarchiving project:', err)
+      alert('Failed to unarchive project. Please try again.')
+    }
+  }
+
+  // Delete project (permanent)
   const handleDelete = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this project?')) {
+    if (!confirm('Are you sure you want to permanently delete this project? This action cannot be undone.')) {
       return
     }
 
@@ -345,30 +375,30 @@ function App() {
                 if (!editingId) resetForm()
                 setEditingId(null)
               }}
-              className={`px-6 py-2 rounded-lg font-medium transition-colors ${
+              className={`px-6 py-2 rounded-lg font-medium transition-all duration-300 hover:scale-105 active:scale-95 ${
                 view === 'calculator'
-                  ? 'bg-indigo-600 text-white'
-                  : 'bg-white text-gray-700 hover:bg-gray-50'
+                  ? 'bg-indigo-600 text-white shadow-lg'
+                  : 'bg-white text-gray-700 hover:bg-gray-50 shadow-md hover:shadow-lg'
               }`}
             >
               Calculator
             </button>
             <button
               onClick={() => setView('list')}
-              className={`px-6 py-2 rounded-lg font-medium transition-colors ${
+              className={`px-6 py-2 rounded-lg font-medium transition-all duration-300 hover:scale-105 active:scale-95 ${
                 view === 'list'
-                  ? 'bg-indigo-600 text-white'
-                  : 'bg-white text-gray-700 hover:bg-gray-50'
+                  ? 'bg-indigo-600 text-white shadow-lg'
+                  : 'bg-white text-gray-700 hover:bg-gray-50 shadow-md hover:shadow-lg'
               }`}
             >
-              Payable Commissions ({savedProjects.length})
+              Payable Commissions ({savedProjects.filter(p => !p.archived).length})
             </button>
             <button
               onClick={() => setView('overview')}
-              className={`px-6 py-2 rounded-lg font-medium transition-colors ${
+              className={`px-6 py-2 rounded-lg font-medium transition-all duration-300 hover:scale-105 active:scale-95 ${
                 view === 'overview'
-                  ? 'bg-indigo-600 text-white'
-                  : 'bg-white text-gray-700 hover:bg-gray-50'
+                  ? 'bg-indigo-600 text-white shadow-lg'
+                  : 'bg-white text-gray-700 hover:bg-gray-50 shadow-md hover:shadow-lg'
               }`}
             >
               Overview
@@ -376,10 +406,10 @@ function App() {
             {canManageProvision() && (
               <button
                 onClick={() => setView('settings')}
-                className={`px-6 py-2 rounded-lg font-medium transition-colors ${
+                className={`px-6 py-2 rounded-lg font-medium transition-all duration-300 hover:scale-105 active:scale-95 ${
                   view === 'settings'
-                    ? 'bg-indigo-600 text-white'
-                    : 'bg-white text-gray-700 hover:bg-gray-50'
+                    ? 'bg-indigo-600 text-white shadow-lg'
+                    : 'bg-white text-gray-700 hover:bg-gray-50 shadow-md hover:shadow-lg'
                 }`}
               >
                 Settings
@@ -389,9 +419,9 @@ function App() {
         </div>
 
         {view === 'calculator' ? (
-          <div className="bg-white rounded-lg shadow-xl p-6 md:p-8">
-            <h1 className="text-3xl font-bold text-gray-800 mb-2">KLAUS</h1>
-            <p className="text-gray-600 mb-6">
+          <div className="bg-white rounded-lg shadow-xl p-6 md:p-8 animate-fadeIn">
+            <h1 className="text-3xl font-bold text-gray-800 mb-2 animate-slideDown">KLAUS</h1>
+            <p className="text-gray-600 mb-6 animate-slideUp">
               {editingId ? 'Edit Project' : 'Project Cost & Provision Calculator'}
             </p>
 
@@ -592,14 +622,14 @@ function App() {
                 {editingId ? (
                   <button
                     onClick={handleUpdateProject}
-                    className="w-full bg-indigo-600 text-white py-3 px-6 rounded-lg font-medium hover:bg-indigo-700 transition-colors"
+                    className="w-full bg-indigo-600 text-white py-3 px-6 rounded-lg font-medium hover:bg-indigo-700 transition-all duration-300 hover:scale-105 active:scale-95 shadow-lg hover:shadow-xl"
                   >
                     Update Project
                   </button>
                 ) : (
                   <button
                     onClick={handleSaveProject}
-                    className="w-full bg-indigo-600 text-white py-3 px-6 rounded-lg font-medium hover:bg-indigo-700 transition-colors"
+                    className="w-full bg-indigo-600 text-white py-3 px-6 rounded-lg font-medium hover:bg-indigo-700 transition-all duration-300 hover:scale-105 active:scale-95 shadow-lg hover:shadow-xl"
                   >
                     Save to Payable Commissions
                   </button>
@@ -608,53 +638,150 @@ function App() {
             </div>
           </div>
         ) : view === 'list' ? (
-          <div className="bg-white rounded-lg shadow-xl p-6 md:p-8">
-            <div className="flex justify-between items-center mb-6">
+          <div className="bg-white rounded-lg shadow-xl p-6 md:p-8 animate-fadeIn">
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
               <div>
-                <h1 className="text-3xl font-bold text-gray-800 mb-2">Payable Commissions</h1>
+                <h1 className="text-3xl font-bold text-gray-800 mb-2 animate-slideDown">Payable Commissions</h1>
                 <p className="text-gray-600">Manage your saved projects</p>
               </div>
-              {(user.role === 'teamleader' || user.role === 'admin') && teamMembers.length > 0 && (
+              <div className="flex flex-wrap items-center gap-3">
+                {(user.role === 'teamleader' || user.role === 'admin') && teamMembers.length > 0 && (
+                  <div className="flex items-center gap-2">
+                    <label className="text-sm font-medium text-gray-700">Team:</label>
+                    <select
+                      value={selectedTeamMemberFilter}
+                      onChange={(e) => setSelectedTeamMemberFilter(e.target.value)}
+                      className="px-4 py-2 border border-gray-300 rounded-lg text-sm transition-all hover:border-indigo-500 focus:ring-2 focus:ring-indigo-500"
+                    >
+                      <option value="all">All Members</option>
+                      {teamMembers.map(member => (
+                        <option key={member.id} value={member.id}>{member.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
                 <div className="flex items-center gap-2">
-                  <label className="text-sm font-medium text-gray-700">Filter by team member:</label>
-                  <select
-                    value={selectedTeamMemberFilter}
-                    onChange={(e) => setSelectedTeamMemberFilter(e.target.value)}
-                    className="px-4 py-2 border border-gray-300 rounded-lg text-sm"
+                  <label className="text-sm font-medium text-gray-700">Show:</label>
+                  <button
+                    onClick={() => setShowArchived(!showArchived)}
+                    className={`px-4 py-2 rounded-lg text-sm transition-all ${
+                      showArchived 
+                        ? 'bg-indigo-600 text-white' 
+                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    }`}
                   >
-                    <option value="all">All Members</option>
-                    {teamMembers.map(member => (
-                      <option key={member.id} value={member.id}>{member.name}</option>
-                    ))}
-                  </select>
+                    {showArchived ? 'Active' : 'Archived'}
+                  </button>
                 </div>
-              )}
+              </div>
+            </div>
+
+            {/* Search and Date Range */}
+            <div className="mb-6 space-y-4 animate-slideUp">
+              <div className="flex flex-col md:flex-row gap-4">
+                <div className="flex-1 relative">
+                  <input
+                    type="text"
+                    placeholder="Search projects..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="w-full px-4 py-2 pl-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
+                  />
+                  <svg className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                  </svg>
+                </div>
+                <div className="flex gap-2">
+                  <input
+                    type="date"
+                    placeholder="Start date"
+                    value={dateRangeStart}
+                    onChange={(e) => setDateRangeStart(e.target.value)}
+                    className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
+                  />
+                  <input
+                    type="date"
+                    placeholder="End date"
+                    value={dateRangeEnd}
+                    onChange={(e) => setDateRangeEnd(e.target.value)}
+                    className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
+                  />
+                  {(dateRangeStart || dateRangeEnd) && (
+                    <button
+                      onClick={() => {
+                        setDateRangeStart('')
+                        setDateRangeEnd('')
+                      }}
+                      className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-all"
+                    >
+                      Clear
+                    </button>
+                  )}
+                </div>
+              </div>
             </div>
 
             {(() => {
-              const filteredProjects = selectedTeamMemberFilter === 'all' 
+              let filteredProjects = selectedTeamMemberFilter === 'all' 
                 ? savedProjects 
                 : savedProjects.filter(p => p.createdBy === selectedTeamMemberFilter)
               
+              // Filter by archive status
+              filteredProjects = filteredProjects.filter(p => showArchived ? p.archived : !p.archived)
+              
+              // Filter by search query
+              if (searchQuery) {
+                filteredProjects = filteredProjects.filter(p => 
+                  p.projectName.toLowerCase().includes(searchQuery.toLowerCase())
+                )
+              }
+              
+              // Filter by date range
+              if (dateRangeStart || dateRangeEnd) {
+                filteredProjects = filteredProjects.filter(p => {
+                  if (!p.createdAt) return false
+                  const projectDate = new Date(p.createdAt)
+                  if (dateRangeStart && projectDate < new Date(dateRangeStart)) return false
+                  if (dateRangeEnd && projectDate > new Date(dateRangeEnd)) return false
+                  return true
+                })
+              }
+              
               return filteredProjects.length === 0 ? (
-              <div className="text-center py-12 text-gray-500">
-                <p>No projects saved yet.</p>
-                <p className="mt-2">Use the calculator to create and save projects.</p>
+              <div className="text-center py-12 text-gray-500 animate-fadeIn">
+                <p>No projects found.</p>
+                <p className="mt-2">
+                  {searchQuery || dateRangeStart || dateRangeEnd 
+                    ? 'Try adjusting your filters.' 
+                    : 'Use the calculator to create and save projects.'}
+                </p>
               </div>
             ) : (
               <div className="space-y-4">
-                {filteredProjects.map((project) => {
+                {filteredProjects.map((project, index) => {
                   const projectOwner = teamMembers.find(m => m.id === project.createdBy)
                   return (
                   <div
                     key={project.id}
-                    className="border border-gray-200 rounded-lg p-6 hover:shadow-md transition-shadow"
+                    className={`border rounded-lg p-6 transition-all duration-300 hover:shadow-lg hover:scale-[1.01] ${
+                      project.archived 
+                        ? 'border-gray-300 bg-gray-50 opacity-75' 
+                        : 'border-gray-200 bg-white'
+                    } animate-slideIn`}
+                    style={{ animationDelay: `${index * 50}ms` }}
                   >
                     <div className="flex justify-between items-start mb-4">
-                      <div>
-                        <h3 className="text-xl font-semibold text-gray-800">
-                          {project.projectName}
-                        </h3>
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2">
+                          <h3 className="text-xl font-semibold text-gray-800">
+                            {project.projectName}
+                          </h3>
+                          {project.archived && (
+                            <span className="px-2 py-1 bg-gray-200 text-gray-600 text-xs rounded-full animate-pulse">
+                              Archived
+                            </span>
+                          )}
+                        </div>
                         <p className="text-sm text-gray-500 mt-1">
                           Created: {new Date(project.createdAt).toLocaleDateString()}
                         </p>
@@ -667,13 +794,28 @@ function App() {
                       <div className="flex gap-2">
                         <button
                           onClick={() => handleEdit(project)}
-                          className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors text-sm"
+                          className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-all hover:scale-105 active:scale-95 text-sm shadow-md hover:shadow-lg"
                         >
                           Edit
                         </button>
+                        {project.archived ? (
+                          <button
+                            onClick={() => handleUnarchive(project.id)}
+                            className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-all hover:scale-105 active:scale-95 text-sm shadow-md hover:shadow-lg"
+                          >
+                            Unarchive
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => handleArchive(project.id)}
+                            className="px-4 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 transition-all hover:scale-105 active:scale-95 text-sm shadow-md hover:shadow-lg"
+                          >
+                            Archive
+                          </button>
+                        )}
                         <button
                           onClick={() => handleDelete(project.id)}
-                          className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors text-sm"
+                          className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-all hover:scale-105 active:scale-95 text-sm shadow-md hover:shadow-lg"
                         >
                           Delete
                         </button>
@@ -751,27 +893,27 @@ function App() {
             })()}
           </div>
         ) : view === 'overview' ? (
-          <div className="bg-white rounded-lg shadow-xl p-6 md:p-8">
-            <h1 className="text-3xl font-bold text-gray-800 mb-2">Overview</h1>
-            <p className="text-gray-600 mb-6">Month-over-month performance and invoicing</p>
+          <div className="bg-white rounded-lg shadow-xl p-6 md:p-8 animate-fadeIn">
+            <h1 className="text-3xl font-bold text-gray-800 mb-2 animate-slideDown">Overview</h1>
+            <p className="text-gray-600 mb-6 animate-slideUp">Month-over-month performance and invoicing</p>
 
             {/* Team Statistics (for Team Leaders and Admins) */}
             {(user.role === 'teamleader' || user.role === 'admin') && teamMembers.length > 0 && (
               <div className="mb-8 p-6 bg-gradient-to-br from-indigo-50 to-blue-50 rounded-lg border border-indigo-200">
                 <h2 className="text-2xl font-bold text-gray-800 mb-4">Team Statistics</h2>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-                  <div className="bg-white p-4 rounded-lg shadow-sm">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                  <div className="bg-white p-4 rounded-lg shadow-sm transition-all hover:scale-105 hover:shadow-md">
                     <p className="text-sm text-gray-600 mb-1">Team Members</p>
                     <p className="text-2xl font-bold text-indigo-900">{teamMembers.length}</p>
                   </div>
-                  <div className="bg-white p-4 rounded-lg shadow-sm">
+                  <div className="bg-white p-4 rounded-lg shadow-sm transition-all hover:scale-105 hover:shadow-md">
                     <p className="text-sm text-gray-600 mb-1">Team Projects</p>
-                    <p className="text-2xl font-bold text-indigo-900">{savedProjects.length}</p>
+                    <p className="text-2xl font-bold text-indigo-900">{activeProjects.length}</p>
                   </div>
-                  <div className="bg-white p-4 rounded-lg shadow-sm">
+                  <div className="bg-white p-4 rounded-lg shadow-sm transition-all hover:scale-105 hover:shadow-md">
                     <p className="text-sm text-gray-600 mb-1">Team Total Provision</p>
                     <p className="text-2xl font-bold text-indigo-900">
-                      {savedProjects.reduce((sum, p) => sum + p.provision, 0).toLocaleString('cs-CZ', {
+                      {activeProjects.reduce((sum, p) => sum + p.provision, 0).toLocaleString('cs-CZ', {
                         minimumFractionDigits: 2,
                         maximumFractionDigits: 2,
                       })} CZK
@@ -784,12 +926,12 @@ function App() {
                   <h3 className="text-lg font-semibold text-gray-800 mb-3">Team Member Performance</h3>
                   <div className="space-y-3">
                     {teamMembers.map(member => {
-                      const memberProjects = savedProjects.filter(p => p.createdBy === member.id)
+                      const memberProjects = activeProjects.filter(p => p.createdBy === member.id)
                       const memberTotalProvision = memberProjects.reduce((sum, p) => sum + p.provision, 0)
                       const memberTotalInvoiced = memberProjects.reduce((sum, p) => sum + p.invoicedTotalCZK, 0)
                       
                       return (
-                        <div key={member.id} className="bg-white p-4 rounded-lg shadow-sm">
+                        <div key={member.id} className="bg-white p-4 rounded-lg shadow-sm transition-all hover:scale-[1.02] hover:shadow-md">
                           <div className="flex justify-between items-center">
                             <div>
                               <p className="font-semibold text-gray-800">{member.name}</p>
@@ -829,7 +971,7 @@ function App() {
                 projects: SavedProject[]
               }> = {}
 
-              savedProjects.forEach(project => {
+              activeProjects.forEach(project => {
                 if (project.invoiceDueDate) {
                   const date = new Date(project.invoiceDueDate)
                   const year = date.getFullYear()
@@ -861,9 +1003,12 @@ function App() {
                 return b.monthIndex - a.monthIndex
               })
 
-              // Calculate totals
-              const totalProvision = savedProjects.reduce((sum, p) => sum + p.provision, 0)
-              const totalToInvoice = savedProjects
+              // Filter out archived projects for overview
+              const activeProjects = savedProjects.filter(p => !p.archived)
+              
+              // Calculate totals (excluding archived)
+              const totalProvision = activeProjects.reduce((sum, p) => sum + p.provision, 0)
+              const totalToInvoice = activeProjects
                 .filter(p => p.invoiceDueDate)
                 .reduce((sum, p) => sum + p.provision, 0)
 
@@ -892,7 +1037,7 @@ function App() {
                     <div className="bg-green-50 p-4 rounded-lg border-2 border-green-200">
                       <p className="text-sm text-gray-600 mb-1">Total Projects</p>
                       <p className="text-2xl font-bold text-green-900">
-                        {savedProjects.length}
+                        {activeProjects.length}
                       </p>
                     </div>
                   </div>

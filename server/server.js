@@ -425,6 +425,8 @@ app.get('/api/projects', requireAuth, (req, res) => {
     filteredProjects = projects.filter(p => p.createdBy === user.id);
   }
   
+  // Filter out archived projects by default (frontend can request archived separately)
+  // This keeps the API clean - archived projects are still accessible but filtered client-side
   res.json(filteredProjects);
 });
 
@@ -507,6 +509,106 @@ app.put('/api/projects/:id', requireAuth, (req, res) => {
     res.json(projects[index]);
   } else {
     res.status(500).json({ error: 'Failed to update project' });
+  }
+});
+
+// Archive a project (with permission check)
+app.post('/api/projects/:id/archive', requireAuth, (req, res) => {
+  const projects = readProjects();
+  const users = readUsers();
+  const index = projects.findIndex(p => p.id === req.params.id);
+  
+  if (index === -1) {
+    return res.status(404).json({ error: 'Project not found' });
+  }
+  
+  const project = projects[index];
+  
+  // Get user role from users file
+  const user = getUserFromSession(getSession(req));
+  if (!user) {
+    return res.status(401).json({ error: 'User not found' });
+  }
+  
+  // Check permissions
+  if (user.role === 'admin') {
+    // Admins can archive everything
+  } else if (user.role === 'teamleader') {
+    // Team leaders can archive their own projects and their team members' projects
+    const teamMemberIds = users
+      .filter(u => u.createdBy === user.id)
+      .map(u => u.id);
+    
+    if (project.createdBy !== user.id && !teamMemberIds.includes(project.createdBy)) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+  } else {
+    // Regular users can only archive their own projects
+    if (project.createdBy !== user.id) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+  }
+  
+  projects[index] = {
+    ...projects[index],
+    archived: true,
+    archivedAt: new Date().toISOString()
+  };
+  
+  if (writeProjects(projects)) {
+    res.json(projects[index]);
+  } else {
+    res.status(500).json({ error: 'Failed to archive project' });
+  }
+});
+
+// Unarchive a project (with permission check)
+app.post('/api/projects/:id/unarchive', requireAuth, (req, res) => {
+  const projects = readProjects();
+  const users = readUsers();
+  const index = projects.findIndex(p => p.id === req.params.id);
+  
+  if (index === -1) {
+    return res.status(404).json({ error: 'Project not found' });
+  }
+  
+  const project = projects[index];
+  
+  // Get user role from users file
+  const user = getUserFromSession(getSession(req));
+  if (!user) {
+    return res.status(401).json({ error: 'User not found' });
+  }
+  
+  // Check permissions
+  if (user.role === 'admin') {
+    // Admins can unarchive everything
+  } else if (user.role === 'teamleader') {
+    // Team leaders can unarchive their own projects and their team members' projects
+    const teamMemberIds = users
+      .filter(u => u.createdBy === user.id)
+      .map(u => u.id);
+    
+    if (project.createdBy !== user.id && !teamMemberIds.includes(project.createdBy)) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+  } else {
+    // Regular users can only unarchive their own projects
+    if (project.createdBy !== user.id) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+  }
+  
+  projects[index] = {
+    ...projects[index],
+    archived: false,
+    archivedAt: undefined
+  };
+  
+  if (writeProjects(projects)) {
+    res.json(projects[index]);
+  } else {
+    res.status(500).json({ error: 'Failed to unarchive project' });
   }
 });
 

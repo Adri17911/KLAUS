@@ -33,6 +33,8 @@ export interface SavedProject {
   invoiceDueDate: string
   createdAt: string
   createdBy?: string
+  archived?: boolean
+  archivedAt?: string
 }
 
 export interface User {
@@ -209,4 +211,24 @@ export const deleteProject = async (id: string): Promise<void> => {
     headers: getAuthHeaders(),
   })
   if (!response.ok) throw new Error('Failed to delete project')
+}
+
+// Archive a project
+export const archiveProject = async (id: string): Promise<SavedProject> => {
+  const response = await fetch(`${API_BASE_URL}/projects/${id}/archive`, {
+    method: 'POST',
+    headers: getAuthHeaders(),
+  })
+  if (!response.ok) throw new Error('Failed to archive project')
+  return await response.json()
+}
+
+// Unarchive a project
+export const unarchiveProject = async (id: string): Promise<SavedProject> => {
+  const response = await fetch(`${API_BASE_URL}/projects/${id}/unarchive`, {
+    method: 'POST',
+    headers: getAuthHeaders(),
+  })
+  if (!response.ok) throw new Error('Failed to unarchive project')
+  return await response.json()
 }
