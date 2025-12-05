@@ -559,8 +559,15 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok' });
 });
 
-// Migration: Assign existing projects to Adrian Šrajer on first run
+// Migration: Assign existing projects to Adrian Šrajer (one-time only)
+const MIGRATION_FLAG_FILE = path.join(__dirname, 'data', '.migration_completed');
+
 const migrateProjects = () => {
+  // Check if migration has already been completed
+  if (fs.existsSync(MIGRATION_FLAG_FILE)) {
+    return; // Migration already completed, skip
+  }
+  
   try {
     const users = readUsers();
     const projects = readProjects();
@@ -597,12 +604,16 @@ const migrateProjects = () => {
       writeProjects(projects);
       console.log(`Assigned ${projectsToUpdate.length} existing projects to ${adrian.name}`);
     }
+    
+    // Mark migration as completed
+    fs.writeFileSync(MIGRATION_FLAG_FILE, JSON.stringify({ completed: true, date: new Date().toISOString() }));
+    console.log('Migration completed successfully');
   } catch (error) {
     console.error('Migration error:', error);
   }
 };
 
-// Run migration on startup
+// Run migration on startup (only once)
 migrateProjects();
 
 app.listen(PORT, () => {
