@@ -1,6 +1,21 @@
 import { useState, useEffect } from 'react'
 import * as api from './services/api'
 import type { SavedProject } from './services/api'
+import {
+  LineChart,
+  Line,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+  ResponsiveContainer,
+  PieChart,
+  Pie,
+  Cell
+} from 'recharts'
 
 type Currency = 'CZK' | 'EUR'
 type View = 'calculator' | 'list' | 'overview'
@@ -736,6 +751,262 @@ function App() {
                       </p>
                     </div>
                   </div>
+
+                  {/* Charts Section */}
+                  {sortedMonths.length > 0 && (
+                    <div className="space-y-6">
+                      {/* Monthly Provision Trend */}
+                      <div>
+                        <h2 className="text-xl font-semibold text-gray-800 mb-4">
+                          Monthly Provision Trend
+                        </h2>
+                        <div className="bg-white p-4 rounded-lg border border-gray-200">
+                          <ResponsiveContainer width="100%" height={300}>
+                            <LineChart
+                              data={[...sortedMonths].reverse().map(m => ({
+                                month: `${m.month.substring(0, 3)} ${m.year}`,
+                                provision: m.totalProvision,
+                                toInvoice: m.totalToInvoice
+                              }))}
+                            >
+                              <CartesianGrid strokeDasharray="3 3" />
+                              <XAxis dataKey="month" />
+                              <YAxis />
+                              <Tooltip
+                                formatter={(value: number) => [
+                                  `${value.toLocaleString('cs-CZ', {
+                                    minimumFractionDigits: 2,
+                                    maximumFractionDigits: 2,
+                                  })} CZK`,
+                                  ''
+                                ]}
+                              />
+                              <Legend />
+                              <Line
+                                type="monotone"
+                                dataKey="provision"
+                                stroke="#6366f1"
+                                strokeWidth={2}
+                                name="Total Provision"
+                              />
+                              <Line
+                                type="monotone"
+                                dataKey="toInvoice"
+                                stroke="#3b82f6"
+                                strokeWidth={2}
+                                name="To Invoice"
+                              />
+                            </LineChart>
+                          </ResponsiveContainer>
+                        </div>
+                      </div>
+
+                      {/* Monthly Invoicing Bar Chart */}
+                      <div>
+                        <h2 className="text-xl font-semibold text-gray-800 mb-4">
+                          Monthly Invoicing Amounts
+                        </h2>
+                        <div className="bg-white p-4 rounded-lg border border-gray-200">
+                          <ResponsiveContainer width="100%" height={300}>
+                            <BarChart
+                              data={[...sortedMonths].reverse().map(m => ({
+                                month: `${m.month.substring(0, 3)} ${m.year}`,
+                                amount: m.totalToInvoice,
+                                projects: m.projectCount
+                              }))}
+                            >
+                              <CartesianGrid strokeDasharray="3 3" />
+                              <XAxis dataKey="month" />
+                              <YAxis />
+                              <Tooltip
+                                formatter={(value: number, name: string) => {
+                                  if (name === 'amount') {
+                                    return [
+                                      `${value.toLocaleString('cs-CZ', {
+                                        minimumFractionDigits: 2,
+                                        maximumFractionDigits: 2,
+                                      })} CZK`,
+                                      'Amount'
+                                    ]
+                                  }
+                                  return [value, 'Projects']
+                                }}
+                              />
+                              <Legend />
+                              <Bar dataKey="amount" fill="#6366f1" name="Amount (CZK)" />
+                            </BarChart>
+                          </ResponsiveContainer>
+                        </div>
+                      </div>
+
+                      {/* Provision Percentage Breakdown */}
+                      <div>
+                        <h2 className="text-xl font-semibold text-gray-800 mb-4">
+                          Provision Percentage Distribution
+                        </h2>
+                        <div className="bg-white p-4 rounded-lg border border-gray-200">
+                          <ResponsiveContainer width="100%" height={300}>
+                            <PieChart>
+                              <Pie
+                                data={[
+                                  {
+                                    name: '10% Provision',
+                                    value: savedProjects
+                                      .filter(p => p.provisionPercent === 10)
+                                      .reduce((sum, p) => sum + p.provision, 0)
+                                  },
+                                  {
+                                    name: '15% Provision',
+                                    value: savedProjects
+                                      .filter(p => p.provisionPercent === 15)
+                                      .reduce((sum, p) => sum + p.provision, 0)
+                                  }
+                                ]}
+                                cx="50%"
+                                cy="50%"
+                                labelLine={false}
+                                label={({ name, percent }) =>
+                                  `${name}: ${((percent || 0) * 100).toFixed(0)}%`
+                                }
+                                outerRadius={80}
+                                fill="#8884d8"
+                                dataKey="value"
+                              >
+                                <Cell fill="#10b981" />
+                                <Cell fill="#6366f1" />
+                              </Pie>
+                              <Tooltip
+                                formatter={(value: number) =>
+                                  `${value.toLocaleString('cs-CZ', {
+                                    minimumFractionDigits: 2,
+                                    maximumFractionDigits: 2,
+                                  })} CZK`
+                                }
+                              />
+                            </PieChart>
+                          </ResponsiveContainer>
+                        </div>
+                      </div>
+
+                      {/* Historical Comparison - Year over Year */}
+                      {(() => {
+                        const yearlyData: Record<number, number> = {}
+                        savedProjects.forEach(project => {
+                          if (project.invoiceDueDate) {
+                            const year = new Date(project.invoiceDueDate).getFullYear()
+                            yearlyData[year] = (yearlyData[year] || 0) + project.provision
+                          }
+                        })
+                        const years = Object.keys(yearlyData)
+                          .map(Number)
+                          .sort((a, b) => a - b)
+
+                        if (years.length > 1) {
+                          return (
+                            <div>
+                              <h2 className="text-xl font-semibold text-gray-800 mb-4">
+                                Year-over-Year Comparison
+                              </h2>
+                              <div className="bg-white p-4 rounded-lg border border-gray-200">
+                                <ResponsiveContainer width="100%" height={300}>
+                                  <BarChart
+                                    data={years.map(year => ({
+                                      year: year.toString(),
+                                      provision: yearlyData[year]
+                                    }))}
+                                  >
+                                    <CartesianGrid strokeDasharray="3 3" />
+                                    <XAxis dataKey="year" />
+                                    <YAxis />
+                                    <Tooltip
+                                      formatter={(value: number) => [
+                                        `${value.toLocaleString('cs-CZ', {
+                                          minimumFractionDigits: 2,
+                                          maximumFractionDigits: 2,
+                                        })} CZK`,
+                                        'Provision'
+                                      ]}
+                                    />
+                                    <Legend />
+                                    <Bar dataKey="provision" fill="#8b5cf6" name="Total Provision (CZK)" />
+                                  </BarChart>
+                                </ResponsiveContainer>
+                              </div>
+                            </div>
+                          )
+                        }
+                        return null
+                      })()}
+
+                      {/* Month-over-Month Growth */}
+                      {sortedMonths.length > 1 && (
+                        <div>
+                          <h2 className="text-xl font-semibold text-gray-800 mb-4">
+                            Month-over-Month Growth
+                          </h2>
+                          <div className="bg-white p-4 rounded-lg border border-gray-200">
+                            <ResponsiveContainer width="100%" height={300}>
+                              <LineChart
+                                data={[...sortedMonths]
+                                  .reverse()
+                                  .map((m, index, arr) => {
+                                    const prevMonth = arr[index - 1]
+                                    const growth =
+                                      prevMonth
+                                        ? ((m.totalProvision - prevMonth.totalProvision) /
+                                            prevMonth.totalProvision) *
+                                          100
+                                        : 0
+                                    return {
+                                      month: `${m.month.substring(0, 3)} ${m.year}`,
+                                      provision: m.totalProvision,
+                                      growth: growth.toFixed(1)
+                                    }
+                                  })}
+                              >
+                                <CartesianGrid strokeDasharray="3 3" />
+                                <XAxis dataKey="month" />
+                                <YAxis yAxisId="left" />
+                                <YAxis yAxisId="right" orientation="right" />
+                                <Tooltip
+                                  formatter={(value: number, name: string) => {
+                                    if (name === 'provision') {
+                                      return [
+                                        `${value.toLocaleString('cs-CZ', {
+                                          minimumFractionDigits: 2,
+                                          maximumFractionDigits: 2,
+                                        })} CZK`,
+                                        'Provision'
+                                      ]
+                                    }
+                                    return [`${value}%`, 'Growth']
+                                  }}
+                                />
+                                <Legend />
+                                <Line
+                                  yAxisId="left"
+                                  type="monotone"
+                                  dataKey="provision"
+                                  stroke="#6366f1"
+                                  strokeWidth={2}
+                                  name="Provision (CZK)"
+                                />
+                                <Line
+                                  yAxisId="right"
+                                  type="monotone"
+                                  dataKey="growth"
+                                  stroke="#10b981"
+                                  strokeWidth={2}
+                                  name="Growth %"
+                                  strokeDasharray="5 5"
+                                />
+                              </LineChart>
+                            </ResponsiveContainer>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
 
                   {/* Monthly Breakdown */}
                   <div>
