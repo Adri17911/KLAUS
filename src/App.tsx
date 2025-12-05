@@ -898,7 +898,11 @@ function App() {
             <p className="text-gray-600 mb-6 animate-slideUp">Month-over-month performance and invoicing</p>
 
             {/* Team Statistics (for Team Leaders and Admins) */}
-            {(user.role === 'teamleader' || user.role === 'admin') && teamMembers.length > 0 && (
+            {(() => {
+              // Filter out archived projects for overview
+              const activeProjects = savedProjects.filter((p: SavedProject) => !p.archived)
+              
+              return (user.role === 'teamleader' || user.role === 'admin') && teamMembers.length > 0 ? (
               <div className="mb-8 p-6 bg-gradient-to-br from-indigo-50 to-blue-50 rounded-lg border border-indigo-200">
                 <h2 className="text-2xl font-bold text-gray-800 mb-4">Team Statistics</h2>
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
@@ -913,7 +917,7 @@ function App() {
                   <div className="bg-white p-4 rounded-lg shadow-sm transition-all hover:scale-105 hover:shadow-md">
                     <p className="text-sm text-gray-600 mb-1">Team Total Provision</p>
                     <p className="text-2xl font-bold text-indigo-900">
-                      {activeProjects.reduce((sum, p) => sum + p.provision, 0).toLocaleString('cs-CZ', {
+                      {activeProjects.reduce((sum: number, p: SavedProject) => sum + p.provision, 0).toLocaleString('cs-CZ', {
                         minimumFractionDigits: 2,
                         maximumFractionDigits: 2,
                       })} CZK
@@ -926,9 +930,9 @@ function App() {
                   <h3 className="text-lg font-semibold text-gray-800 mb-3">Team Member Performance</h3>
                   <div className="space-y-3">
                     {teamMembers.map(member => {
-                      const memberProjects = activeProjects.filter(p => p.createdBy === member.id)
-                      const memberTotalProvision = memberProjects.reduce((sum, p) => sum + p.provision, 0)
-                      const memberTotalInvoiced = memberProjects.reduce((sum, p) => sum + p.invoicedTotalCZK, 0)
+                      const memberProjects = activeProjects.filter((p: SavedProject) => p.createdBy === member.id)
+                      const memberTotalProvision = memberProjects.reduce((sum: number, p: SavedProject) => sum + p.provision, 0)
+                      const memberTotalInvoiced = memberProjects.reduce((sum: number, p: SavedProject) => sum + p.invoicedTotalCZK, 0)
                       
                       return (
                         <div key={member.id} className="bg-white p-4 rounded-lg shadow-sm transition-all hover:scale-[1.02] hover:shadow-md">
@@ -957,9 +961,13 @@ function App() {
                   </div>
                 </div>
               </div>
-            )}
+              ) : null
+            })()}
 
             {(() => {
+              // Filter out archived projects for overview
+              const activeProjects = savedProjects.filter((p: SavedProject) => !p.archived)
+              
               // Group projects by month based on invoice due date
               const monthlyData: Record<string, {
                 month: string
@@ -971,7 +979,7 @@ function App() {
                 projects: SavedProject[]
               }> = {}
 
-              activeProjects.forEach(project => {
+              activeProjects.forEach((project: SavedProject) => {
                 if (project.invoiceDueDate) {
                   const date = new Date(project.invoiceDueDate)
                   const year = date.getFullYear()
@@ -1003,14 +1011,11 @@ function App() {
                 return b.monthIndex - a.monthIndex
               })
 
-              // Filter out archived projects for overview
-              const activeProjects = savedProjects.filter(p => !p.archived)
-              
               // Calculate totals (excluding archived)
-              const totalProvision = activeProjects.reduce((sum, p) => sum + p.provision, 0)
+              const totalProvision = activeProjects.reduce((sum: number, p: SavedProject) => sum + p.provision, 0)
               const totalToInvoice = activeProjects
-                .filter(p => p.invoiceDueDate)
-                .reduce((sum, p) => sum + p.provision, 0)
+                .filter((p: SavedProject) => p.invoiceDueDate)
+                .reduce((sum: number, p: SavedProject) => sum + p.provision, 0)
 
               return (
                 <div className="space-y-6">
@@ -1175,7 +1180,7 @@ function App() {
                       {/* Historical Comparison - Year over Year */}
                       {(() => {
                         const yearlyData: Record<number, number> = {}
-                        savedProjects.forEach(project => {
+                        activeProjects.forEach((project: SavedProject) => {
                           if (project.invoiceDueDate) {
                             const year = new Date(project.invoiceDueDate).getFullYear()
                             yearlyData[year] = (yearlyData[year] || 0) + project.provision
