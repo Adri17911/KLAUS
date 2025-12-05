@@ -3,7 +3,7 @@ import * as api from './services/api'
 import type { SavedProject } from './services/api'
 
 type Currency = 'CZK' | 'EUR'
-type View = 'calculator' | 'list'
+type View = 'calculator' | 'list' | 'overview'
 
 function App() {
   const [view, setView] = useState<View>('calculator')
@@ -302,6 +302,16 @@ function App() {
             }`}
           >
             Payable Commissions ({savedProjects.length})
+          </button>
+          <button
+            onClick={() => setView('overview')}
+            className={`px-6 py-2 rounded-lg font-medium transition-colors ${
+              view === 'overview'
+                ? 'bg-indigo-600 text-white'
+                : 'bg-white text-gray-700 hover:bg-gray-50'
+            }`}
+          >
+            Overview
           </button>
         </div>
 
@@ -642,7 +652,183 @@ function App() {
               </div>
             )}
           </div>
-        )}
+        ) : view === 'overview' ? (
+          <div className="bg-white rounded-lg shadow-xl p-6 md:p-8">
+            <h1 className="text-3xl font-bold text-gray-800 mb-2">Overview</h1>
+            <p className="text-gray-600 mb-6">Month-over-month performance and invoicing</p>
+
+            {(() => {
+              // Group projects by month based on invoice due date
+              const monthlyData: Record<string, {
+                month: string
+                year: number
+                monthIndex: number
+                totalProvision: number
+                totalToInvoice: number
+                projectCount: number
+                projects: SavedProject[]
+              }> = {}
+
+              savedProjects.forEach(project => {
+                if (project.invoiceDueDate) {
+                  const date = new Date(project.invoiceDueDate)
+                  const year = date.getFullYear()
+                  const month = date.toLocaleString('en-US', { month: 'long' })
+                  const monthKey = `${year}-${String(date.getMonth() + 1).padStart(2, '0')}`
+                  
+                  if (!monthlyData[monthKey]) {
+                    monthlyData[monthKey] = {
+                      month,
+                      year,
+                      monthIndex: date.getMonth(),
+                      totalProvision: 0,
+                      totalToInvoice: 0,
+                      projectCount: 0,
+                      projects: []
+                    }
+                  }
+                  
+                  monthlyData[monthKey].totalProvision += project.provision
+                  monthlyData[monthKey].totalToInvoice += project.provision
+                  monthlyData[monthKey].projectCount += 1
+                  monthlyData[monthKey].projects.push(project)
+                }
+              })
+
+              // Sort by year and month (newest first)
+              const sortedMonths = Object.values(monthlyData).sort((a, b) => {
+                if (a.year !== b.year) return b.year - a.year
+                return b.monthIndex - a.monthIndex
+              })
+
+              // Calculate totals
+              const totalProvision = savedProjects.reduce((sum, p) => sum + p.provision, 0)
+              const totalToInvoice = savedProjects
+                .filter(p => p.invoiceDueDate)
+                .reduce((sum, p) => sum + p.provision, 0)
+
+              return (
+                <div className="space-y-6">
+                  {/* Summary Cards */}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="bg-indigo-50 p-4 rounded-lg border-2 border-indigo-200">
+                      <p className="text-sm text-gray-600 mb-1">Total Provision</p>
+                      <p className="text-2xl font-bold text-indigo-900">
+                        {totalProvision.toLocaleString('cs-CZ', {
+                          minimumFractionDigits: 2,
+                          maximumFractionDigits: 2,
+                        })} CZK
+                      </p>
+                    </div>
+                    <div className="bg-blue-50 p-4 rounded-lg border-2 border-blue-200">
+                      <p className="text-sm text-gray-600 mb-1">Total to Invoice</p>
+                      <p className="text-2xl font-bold text-blue-900">
+                        {totalToInvoice.toLocaleString('cs-CZ', {
+                          minimumFractionDigits: 2,
+                          maximumFractionDigits: 2,
+                        })} CZK
+                      </p>
+                    </div>
+                    <div className="bg-green-50 p-4 rounded-lg border-2 border-green-200">
+                      <p className="text-sm text-gray-600 mb-1">Total Projects</p>
+                      <p className="text-2xl font-bold text-green-900">
+                        {savedProjects.length}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Monthly Breakdown */}
+                  <div>
+                    <h2 className="text-xl font-semibold text-gray-800 mb-4">
+                      Monthly Breakdown (Invoice Due Date)
+                    </h2>
+                    
+                    {sortedMonths.length === 0 ? (
+                      <div className="text-center py-8 text-gray-500">
+                        <p>No projects with invoice due dates yet.</p>
+                        <p className="mt-2 text-sm">Add invoice due dates to projects to see monthly breakdown.</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-4">
+                        {sortedMonths.map((monthData) => {
+                          const invoiceDate = new Date(monthData.year, monthData.monthIndex, 12)
+                          const isPast = invoiceDate < new Date()
+                          
+                          return (
+                            <div
+                              key={`${monthData.year}-${monthData.monthIndex}`}
+                              className={`border rounded-lg p-4 ${
+                                isPast
+                                  ? 'border-gray-200 bg-gray-50'
+                                  : 'border-indigo-200 bg-indigo-50'
+                              }`}
+                            >
+                              <div className="flex justify-between items-start mb-3">
+                                <div>
+                                  <h3 className="text-lg font-semibold text-gray-800">
+                                    {monthData.month} {monthData.year}
+                                  </h3>
+                                  <p className="text-sm text-gray-600">
+                                    Invoice payable on: {invoiceDate.toLocaleDateString('en-US', {
+                                      day: 'numeric',
+                                      month: 'long',
+                                      year: 'numeric'
+                                    })}
+                                  </p>
+                                  <p className="text-xs text-gray-500 mt-1">
+                                    {monthData.projectCount} project{monthData.projectCount !== 1 ? 's' : ''}
+                                  </p>
+                                </div>
+                                <div className="text-right">
+                                  <p className="text-xs text-gray-500 mb-1">Total to Invoice</p>
+                                  <p className="text-xl font-bold text-indigo-900">
+                                    {monthData.totalToInvoice.toLocaleString('cs-CZ', {
+                                      minimumFractionDigits: 2,
+                                      maximumFractionDigits: 2,
+                                    })} CZK
+                                  </p>
+                                </div>
+                              </div>
+                              
+                              {/* Project list for this month */}
+                              <div className="mt-3 pt-3 border-t border-gray-200">
+                                <details className="cursor-pointer">
+                                  <summary className="text-sm text-gray-600 hover:text-gray-800">
+                                    View projects ({monthData.projectCount})
+                                  </summary>
+                                  <div className="mt-2 space-y-2">
+                                    {monthData.projects.map((project) => (
+                                      <div
+                                        key={project.id}
+                                        className="bg-white p-3 rounded border border-gray-200"
+                                      >
+                                        <div className="flex justify-between items-center">
+                                          <span className="font-medium text-gray-800">
+                                            {project.projectName}
+                                          </span>
+                                          <span className="text-sm font-semibold text-indigo-700">
+                                            {project.provision.toLocaleString('cs-CZ', {
+                                              minimumFractionDigits: 2,
+                                              maximumFractionDigits: 2,
+                                            })} CZK
+                                          </span>
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </details>
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )
+            })()}
+          </div>
+        ) : null}
       </div>
     </div>
   )
