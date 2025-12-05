@@ -19,7 +19,7 @@ services:
       dockerfile: Dockerfile
     container_name: klaus-frontend
     ports:
-      - "3000:80"
+      - "69:80"
     depends_on:
       - backend
     restart: unless-stopped
