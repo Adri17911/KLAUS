@@ -76,16 +76,17 @@ function App() {
     return total
   }
 
-  // Calculate provision
+  // Calculate provision: (Invoiced amount - cost amount) * percentage
   const calculateProvision = (): number => {
     if (provisionPercent === null) return 0
     const invoicedCZK = getInvoicedTotalInCZK()
-    return invoicedCZK * (provisionPercent / 100)
+    const cost = calculateCost()
+    return (invoicedCZK - cost) * (provisionPercent / 100)
   }
 
   const cost = calculateCost()
-  const provision = calculateProvision()
   const invoicedTotalCZK = getInvoicedTotalInCZK()
+  const provision = calculateProvision()
 
   // Save project
   const handleSaveProject = async () => {
