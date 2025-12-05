@@ -44,6 +44,8 @@ function App() {
 
   // Saved projects state
   const [savedProjects, setSavedProjects] = useState<SavedProject[]>([])
+  const [teamMembers, setTeamMembers] = useState<User[]>([])
+  const [selectedTeamMemberFilter, setSelectedTeamMemberFilter] = useState<string>('all')
 
   // Load initial data from API
   useEffect(() => {
@@ -65,6 +67,16 @@ function App() {
         // Load projects
         const projects = await api.getProjects()
         setSavedProjects(projects)
+        
+        // Load team members if user is team leader
+        if (user.role === 'teamleader' || user.role === 'admin') {
+          try {
+            const members = await api.getUsers()
+            setTeamMembers(members)
+          } catch (err) {
+            console.error('Error loading team members:', err)
+          }
+        }
       } catch (err) {
         setError('Failed to load data. Please check if the server is running.')
         console.error('Error loading data:', err)
@@ -361,18 +373,6 @@ function App() {
             >
               Overview
             </button>
-            {canManageUsers() && (
-              <button
-                onClick={() => setView('users')}
-                className={`px-6 py-2 rounded-lg font-medium transition-colors ${
-                  view === 'users'
-                    ? 'bg-indigo-600 text-white'
-                    : 'bg-white text-gray-700 hover:bg-gray-50'
-                }`}
-              >
-                Users
-              </button>
-            )}
             {canManageProvision() && (
               <button
                 onClick={() => setView('settings')}
@@ -609,17 +609,43 @@ function App() {
           </div>
         ) : view === 'list' ? (
           <div className="bg-white rounded-lg shadow-xl p-6 md:p-8">
-            <h1 className="text-3xl font-bold text-gray-800 mb-2">Payable Commissions</h1>
-            <p className="text-gray-600 mb-6">Manage your saved projects</p>
+            <div className="flex justify-between items-center mb-6">
+              <div>
+                <h1 className="text-3xl font-bold text-gray-800 mb-2">Payable Commissions</h1>
+                <p className="text-gray-600">Manage your saved projects</p>
+              </div>
+              {(user.role === 'teamleader' || user.role === 'admin') && teamMembers.length > 0 && (
+                <div className="flex items-center gap-2">
+                  <label className="text-sm font-medium text-gray-700">Filter by team member:</label>
+                  <select
+                    value={selectedTeamMemberFilter}
+                    onChange={(e) => setSelectedTeamMemberFilter(e.target.value)}
+                    className="px-4 py-2 border border-gray-300 rounded-lg text-sm"
+                  >
+                    <option value="all">All Members</option>
+                    {teamMembers.map(member => (
+                      <option key={member.id} value={member.id}>{member.name}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+            </div>
 
-            {savedProjects.length === 0 ? (
+            {(() => {
+              const filteredProjects = selectedTeamMemberFilter === 'all' 
+                ? savedProjects 
+                : savedProjects.filter(p => p.createdBy === selectedTeamMemberFilter)
+              
+              return filteredProjects.length === 0 ? (
               <div className="text-center py-12 text-gray-500">
                 <p>No projects saved yet.</p>
                 <p className="mt-2">Use the calculator to create and save projects.</p>
               </div>
             ) : (
               <div className="space-y-4">
-                {savedProjects.map((project) => (
+                {filteredProjects.map((project) => {
+                  const projectOwner = teamMembers.find(m => m.id === project.createdBy)
+                  return (
                   <div
                     key={project.id}
                     className="border border-gray-200 rounded-lg p-6 hover:shadow-md transition-shadow"
@@ -632,6 +658,11 @@ function App() {
                         <p className="text-sm text-gray-500 mt-1">
                           Created: {new Date(project.createdAt).toLocaleDateString()}
                         </p>
+                        {projectOwner && (user.role === 'teamleader' || user.role === 'admin') && (
+                          <p className="text-xs text-indigo-600 mt-1">
+                            Owner: {projectOwner.name}
+                          </p>
+                        )}
                       </div>
                       <div className="flex gap-2">
                         <button
@@ -713,14 +744,78 @@ function App() {
                       </div>
                     </div>
                   </div>
-                ))}
+                )
+              })}
               </div>
-            )}
+            )
+            })()}
           </div>
         ) : view === 'overview' ? (
           <div className="bg-white rounded-lg shadow-xl p-6 md:p-8">
             <h1 className="text-3xl font-bold text-gray-800 mb-2">Overview</h1>
             <p className="text-gray-600 mb-6">Month-over-month performance and invoicing</p>
+
+            {/* Team Statistics (for Team Leaders and Admins) */}
+            {(user.role === 'teamleader' || user.role === 'admin') && teamMembers.length > 0 && (
+              <div className="mb-8 p-6 bg-gradient-to-br from-indigo-50 to-blue-50 rounded-lg border border-indigo-200">
+                <h2 className="text-2xl font-bold text-gray-800 mb-4">Team Statistics</h2>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                  <div className="bg-white p-4 rounded-lg shadow-sm">
+                    <p className="text-sm text-gray-600 mb-1">Team Members</p>
+                    <p className="text-2xl font-bold text-indigo-900">{teamMembers.length}</p>
+                  </div>
+                  <div className="bg-white p-4 rounded-lg shadow-sm">
+                    <p className="text-sm text-gray-600 mb-1">Team Projects</p>
+                    <p className="text-2xl font-bold text-indigo-900">{savedProjects.length}</p>
+                  </div>
+                  <div className="bg-white p-4 rounded-lg shadow-sm">
+                    <p className="text-sm text-gray-600 mb-1">Team Total Provision</p>
+                    <p className="text-2xl font-bold text-indigo-900">
+                      {savedProjects.reduce((sum, p) => sum + p.provision, 0).toLocaleString('cs-CZ', {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
+                      })} CZK
+                    </p>
+                  </div>
+                </div>
+                
+                {/* Team Member Performance */}
+                <div className="mt-6">
+                  <h3 className="text-lg font-semibold text-gray-800 mb-3">Team Member Performance</h3>
+                  <div className="space-y-3">
+                    {teamMembers.map(member => {
+                      const memberProjects = savedProjects.filter(p => p.createdBy === member.id)
+                      const memberTotalProvision = memberProjects.reduce((sum, p) => sum + p.provision, 0)
+                      const memberTotalInvoiced = memberProjects.reduce((sum, p) => sum + p.invoicedTotalCZK, 0)
+                      
+                      return (
+                        <div key={member.id} className="bg-white p-4 rounded-lg shadow-sm">
+                          <div className="flex justify-between items-center">
+                            <div>
+                              <p className="font-semibold text-gray-800">{member.name}</p>
+                              <p className="text-xs text-gray-500">{member.email}</p>
+                            </div>
+                            <div className="text-right">
+                              <p className="text-sm text-gray-600">Projects: <span className="font-semibold">{memberProjects.length}</span></p>
+                              <p className="text-sm text-gray-600">Provision: <span className="font-semibold text-indigo-900">
+                                {memberTotalProvision.toLocaleString('cs-CZ', {
+                                  minimumFractionDigits: 2,
+                                  maximumFractionDigits: 2,
+                                })} CZK
+                              </span></p>
+                              <p className="text-xs text-gray-500">Invoiced: {memberTotalInvoiced.toLocaleString('cs-CZ', {
+                                minimumFractionDigits: 2,
+                                maximumFractionDigits: 2,
+                              })} CZK</p>
+                            </div>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              </div>
+            )}
 
             {(() => {
               // Group projects by month based on invoice due date
