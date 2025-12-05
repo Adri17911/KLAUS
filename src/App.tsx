@@ -59,6 +59,30 @@ function App() {
     }
   }, [costPerMD, loading])
 
+  // Auto-calculate Invoiced Total when MDs and MD Rate are entered
+  useEffect(() => {
+    const mds = parseFloat(numberOfMDs)
+    const rate = parseFloat(mdRate)
+    
+    if (mds > 0 && rate > 0) {
+      const calculatedTotal = (mds * rate).toFixed(2)
+      const currentTotal = parseFloat(invoicedTotal)
+      const expectedTotal = mds * rate
+      
+      // Auto-fill if invoicedTotal is empty, or if it matches the previous calculation
+      // This allows manual override while still auto-calculating when MDs/Rate change
+      if (!invoicedTotal || invoicedTotal === '' || Math.abs(currentTotal - expectedTotal) < 0.01) {
+        setInvoicedTotal(calculatedTotal)
+      }
+    } else if ((!numberOfMDs || numberOfMDs === '') && (!mdRate || mdRate === '')) {
+      // Clear invoicedTotal if both MDs and Rate are cleared
+      if (invoicedTotal && parseFloat(invoicedTotal) > 0) {
+        // Only clear if it looks like it was auto-calculated (matches a calculation)
+        // Otherwise, keep it for manual entries
+      }
+    }
+  }, [numberOfMDs, mdRate]) // Note: intentionally not including invoicedTotal to avoid loops
+
   // Calculate cost
   const calculateCost = (): number => {
     const mds = parseFloat(numberOfMDs) || 0
@@ -333,6 +357,9 @@ function App() {
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Invoiced Total ({currency})
+                  {numberOfMDs && mdRate && parseFloat(numberOfMDs) > 0 && parseFloat(mdRate) > 0 && (
+                    <span className="text-xs text-gray-500 ml-2">(auto-calculated from MDs × Rate)</span>
+                  )}
                 </label>
                 <input
                   type="number"
