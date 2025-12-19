@@ -1,8 +1,27 @@
 import { useState, useEffect } from 'react'
 import * as api from './services/api'
-import type { SavedProject, User } from './services/api'
+import type { SavedProject, User, ExtractedInvoiceData } from './services/api'
 import { useAuth } from './contexts/AuthContext'
 import Login from './components/Login'
+import InvoiceUpload from './components/InvoiceUpload'
+import {
+  DndContext,
+  DragOverlay,
+  closestCorners,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent,
+  DragStartEvent,
+} from '@dnd-kit/core'
+import {
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
 import {
   LineChart,
   Line,
@@ -20,7 +39,8 @@ import {
 } from 'recharts'
 
 type Currency = 'CZK' | 'EUR'
-type View = 'calculator' | 'list' | 'overview' | 'users' | 'settings'
+type View = 'calculator' | 'list' | 'kanban' | 'overview' | 'users' | 'settings'
+type ProjectType = 'regular' | 'custom'
 
 function App() {
   const { user, loading: authLoading, logout, canManageUsers, canManageProvision } = useAuth()
@@ -33,6 +53,7 @@ function App() {
   const [provisionPercentages, setProvisionPercentages] = useState<number[]>([10, 15])
   
   // Calculator form state
+  const [projectType, setProjectType] = useState<ProjectType>('regular')
   const [projectName, setProjectName] = useState('')
   const [invoicedTotal, setInvoicedTotal] = useState('')
   const [numberOfMDs, setNumberOfMDs] = useState('')
@@ -41,6 +62,9 @@ function App() {
   const [exchangeRate, setExchangeRate] = useState('')
   const [costPerMD, setCostPerMD] = useState('5000')
   const [provisionPercent, setProvisionPercent] = useState<number | null>(null)
+  // Custom project fields (for referral projects)
+  const [customProfit, setCustomProfit] = useState('')
+  const [customCost, setCustomCost] = useState('')
 
   // Saved projects state
   const [savedProjects, setSavedProjects] = useState<SavedProject[]>([])
@@ -50,6 +74,9 @@ function App() {
   const [dateRangeStart, setDateRangeStart] = useState('')
   const [dateRangeEnd, setDateRangeEnd] = useState('')
   const [showArchived, setShowArchived] = useState(false)
+  const [syncingCrm, setSyncingCrm] = useState(false)
+  const [showInvoiceUpload, setShowInvoiceUpload] = useState(false)
+  const [extractedClient, setExtractedClient] = useState<string>('')  // Store client from invoice extraction
 
   // Load initial data from API
   useEffect(() => {
@@ -129,6 +156,9 @@ function App() {
 
   // Calculate cost
   const calculateCost = (): number => {
+    if (projectType === 'custom') {
+      return parseFloat(customCost) || 0
+    }
     const mds = parseFloat(numberOfMDs) || 0
     const cost = parseFloat(costPerMD) || 0
     return mds * cost
@@ -145,7 +175,11 @@ function App() {
   }
 
   // Calculate provision: (Invoiced amount - cost amount) * percentage
+  // For custom projects, use custom profit directly if provided
   const calculateProvision = (): number => {
+    if (projectType === 'custom' && customProfit) {
+      return parseFloat(customProfit) || 0
+    }
     if (provisionPercent === null) return 0
     const invoicedCZK = getInvoicedTotalInCZK()
     const cost = calculateCost()
@@ -158,8 +192,18 @@ function App() {
 
   // Save project
   const handleSaveProject = async () => {
-    if (!projectName || provisionPercent === null) {
-      alert('Please fill in project name and select provision percentage')
+    if (!projectName) {
+      alert('Please fill in project name')
+      return
+    }
+    
+    if (projectType === 'regular' && provisionPercent === null) {
+      alert('Please select provision percentage')
+      return
+    }
+    
+    if (projectType === 'custom' && (!customProfit || !customCost)) {
+      alert('Please fill in custom profit and custom cost for referral projects')
       return
     }
 
@@ -167,18 +211,23 @@ function App() {
       setError(null)
       const newProject = await api.createProject({
         projectName,
-        invoicedTotal,
-        numberOfMDs,
-        mdRate,
+        projectType,
+        invoicedTotal: projectType === 'custom' ? '0' : invoicedTotal,
+        numberOfMDs: projectType === 'custom' ? '0' : numberOfMDs,
+        mdRate: projectType === 'custom' ? '0' : mdRate,
         currency,
         exchangeRate,
         costPerMD,
-        provisionPercent,
+        provisionPercent: projectType === 'custom' ? 0 : (provisionPercent || 0),
         cost,
         provision,
-        invoicedTotalCZK,
+        invoicedTotalCZK: projectType === 'custom' ? (parseFloat(customProfit) + parseFloat(customCost) || 0) : invoicedTotalCZK,
+        customProfit: projectType === 'custom' ? parseFloat(customProfit) : undefined,
+        customCost: projectType === 'custom' ? parseFloat(customCost) : undefined,
+        status: 'todo',
         paymentReceivedDate: '',
         invoiceDueDate: '',
+        client: extractedClient || undefined,
       })
 
       setSavedProjects([...savedProjects, newProject])
@@ -193,6 +242,7 @@ function App() {
 
   // Reset form
   const resetForm = () => {
+    setProjectType('regular')
     setProjectName('')
     setInvoicedTotal('')
     setNumberOfMDs('')
@@ -200,12 +250,16 @@ function App() {
     setCurrency('CZK')
     setExchangeRate('')
     setProvisionPercent(null)
+    setCustomProfit('')
+    setCustomCost('')
     setInvoicedTotalManuallyEdited(false)
+    setExtractedClient('')
   }
 
   // Load project for editing
   const handleEdit = (project: SavedProject) => {
     setEditingId(project.id)
+    setProjectType(project.projectType || 'regular')
     setProjectName(project.projectName)
     setInvoicedTotal(project.invoicedTotal)
     setNumberOfMDs(project.numberOfMDs)
@@ -214,14 +268,59 @@ function App() {
     setExchangeRate(project.exchangeRate)
     setCostPerMD(project.costPerMD)
     setProvisionPercent(project.provisionPercent)
+    setCustomProfit(project.customProfit?.toString() || '')
+    setCustomCost(project.customCost?.toString() || '')
     setInvoicedTotalManuallyEdited(true) // Don't auto-calculate when editing
     setView('calculator')
   }
 
+  // Handle extracted invoice data
+  const handleInvoiceExtracted = (data: ExtractedInvoiceData) => {
+    // Populate form with extracted data
+    if (data.projectName) {
+      setProjectName(data.projectName)
+    }
+    if (data.invoicedTotal) {
+      setInvoicedTotal(data.invoicedTotal)
+      setInvoicedTotalManuallyEdited(true)
+    }
+    if (data.currency) {
+      setCurrency(data.currency)
+    }
+    if (data.exchangeRate) {
+      setExchangeRate(data.exchangeRate)
+    }
+    // Extract MDs (Počet MJ) if available
+    if (data.numberOfMDs) {
+      setNumberOfMDs(data.numberOfMDs)
+    }
+    // Extract MD rate (Cena MJ) if available
+    if (data.mdRate) {
+      setMdRate(data.mdRate)
+    }
+    // Store client for saving with project
+    if (data.client) {
+      setExtractedClient(data.client)
+    }
+    
+    // Close upload dialog and show calculator
+    setShowInvoiceUpload(false)
+  }
+
   // Update project
   const handleUpdateProject = async () => {
-    if (!editingId || !projectName || provisionPercent === null) {
-      alert('Please fill in project name and select provision percentage')
+    if (!editingId || !projectName) {
+      alert('Please fill in project name')
+      return
+    }
+    
+    if (projectType === 'regular' && provisionPercent === null) {
+      alert('Please select provision percentage')
+      return
+    }
+    
+    if (projectType === 'custom' && (!customProfit || !customCost)) {
+      alert('Please fill in custom profit and custom cost for referral projects')
       return
     }
 
@@ -234,16 +333,20 @@ function App() {
 
       const updatedProject = await api.updateProject(editingId, {
         projectName,
-        invoicedTotal,
-        numberOfMDs,
-        mdRate,
+        projectType,
+        invoicedTotal: projectType === 'custom' ? '0' : invoicedTotal,
+        numberOfMDs: projectType === 'custom' ? '0' : numberOfMDs,
+        mdRate: projectType === 'custom' ? '0' : mdRate,
         currency,
         exchangeRate,
         costPerMD,
-        provisionPercent,
+        provisionPercent: projectType === 'custom' ? 0 : (provisionPercent || 0),
         cost,
         provision,
-        invoicedTotalCZK,
+        invoicedTotalCZK: projectType === 'custom' ? (parseFloat(customProfit) + parseFloat(customCost) || 0) : invoicedTotalCZK,
+        customProfit: projectType === 'custom' ? parseFloat(customProfit) : undefined,
+        customCost: projectType === 'custom' ? parseFloat(customCost) : undefined,
+        status: existingProject.status || 'todo',
         paymentReceivedDate: existingProject.paymentReceivedDate,
         invoiceDueDate: existingProject.invoiceDueDate,
       })
@@ -316,6 +419,48 @@ function App() {
       setError('Failed to delete project')
       console.error('Error deleting project:', err)
       alert('Failed to delete project. Please try again.')
+    }
+  }
+
+  // Sync with CRM
+  const handleSyncCrm = async () => {
+    try {
+      // Check if manual mode is configured
+      const config = await api.getCrmConfig()
+      if (config.configured && config.authMethod === 'manual') {
+        alert('Manual import mode is configured. Please use the "Import Data" button in Settings instead.')
+        setView('settings')
+        return
+      }
+    } catch (err) {
+      // Ignore errors checking config
+    }
+
+    if (!confirm('This will import all won deals from CRM as projects with "pending-review" status. Continue?')) {
+      return
+    }
+
+    try {
+      setSyncingCrm(true)
+      setError(null)
+      const result = await api.syncCrm()
+      
+      // Reload projects to show newly imported ones
+      const projects = await api.getProjects()
+      setSavedProjects(projects)
+      
+      alert(`CRM Sync completed!\n\nImported: ${result.imported} project(s)\nSkipped: ${result.skipped} project(s)`)
+      
+      // Switch to kanban view to see pending-review projects
+      if (result.imported > 0) {
+        setView('kanban')
+      }
+    } catch (err: any) {
+      setError(err.message || 'Failed to sync with CRM')
+      console.error('Error syncing CRM:', err)
+      alert(`Failed to sync with CRM: ${err.message || 'Unknown error'}`)
+    } finally {
+      setSyncingCrm(false)
     }
   }
 
@@ -394,6 +539,29 @@ function App() {
               Payable Commissions ({savedProjects.filter(p => !p.archived).length})
             </button>
             <button
+              onClick={() => setView('kanban')}
+              className={`px-6 py-2 rounded-lg font-medium transition-all duration-300 hover:scale-105 active:scale-95 ${
+                view === 'kanban'
+                  ? 'bg-indigo-600 text-white shadow-lg'
+                  : 'bg-white text-gray-700 hover:bg-gray-50 shadow-md hover:shadow-lg'
+              }`}
+            >
+              Kanban Board
+            </button>
+            {(user.role === 'admin' || user.role === 'teamleader') && (
+              <button
+                onClick={handleSyncCrm}
+                disabled={syncingCrm}
+                className={`px-6 py-2 rounded-lg font-medium transition-all duration-300 hover:scale-105 active:scale-95 ${
+                  syncingCrm
+                    ? 'bg-gray-400 text-white cursor-not-allowed'
+                    : 'bg-green-600 text-white shadow-md hover:shadow-lg hover:bg-green-700'
+                }`}
+              >
+                {syncingCrm ? 'Syncing...' : '🔄 Sync CRM'}
+              </button>
+            )}
+            <button
               onClick={() => setView('overview')}
               className={`px-6 py-2 rounded-lg font-medium transition-all duration-300 hover:scale-105 active:scale-95 ${
                 view === 'overview'
@@ -425,12 +593,30 @@ function App() {
               {editingId ? 'Edit Project' : 'Project Cost & Provision Calculator'}
             </p>
 
+            {showInvoiceUpload ? (
+              <InvoiceUpload
+                onExtracted={handleInvoiceExtracted}
+                onCancel={() => setShowInvoiceUpload(false)}
+              />
+            ) : (
             <div className="space-y-6">
               {/* Project Name */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Project Name
-                </label>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="block text-sm font-medium text-gray-700">
+                    Project Name
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setShowInvoiceUpload(true)}
+                    className="text-sm text-indigo-600 hover:text-indigo-700 font-medium flex items-center gap-1"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                    </svg>
+                    Upload Invoice PDF
+                  </button>
+                </div>
                 <input
                   type="text"
                   value={projectName}
@@ -440,7 +626,38 @@ function App() {
                 />
               </div>
 
-              {/* Currency Selection */}
+              {/* Project Type Selection */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Project Type
+                </label>
+                <div className="flex gap-4">
+                  <label className="flex items-center cursor-pointer">
+                    <input
+                      type="radio"
+                      value="regular"
+                      checked={projectType === 'regular'}
+                      onChange={(e) => setProjectType(e.target.value as ProjectType)}
+                      className="mr-2"
+                    />
+                    <span className="text-gray-700">Regular (MD-based)</span>
+                  </label>
+                  <label className="flex items-center cursor-pointer">
+                    <input
+                      type="radio"
+                      value="custom"
+                      checked={projectType === 'custom'}
+                      onChange={(e) => setProjectType(e.target.value as ProjectType)}
+                      className="mr-2"
+                    />
+                    <span className="text-gray-700">Custom/Referral (Custom Profit & Cost)</span>
+                  </label>
+                </div>
+              </div>
+
+              {projectType === 'regular' ? (
+                <>
+                  {/* Currency Selection */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Currency
@@ -555,26 +772,66 @@ function App() {
                 </p>
               </div>
 
-              {/* Provision Percentage */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-3">
-                  Provision Percentage
-                </label>
-                <div className="flex gap-4 flex-wrap">
-                  {provisionPercentages.map((percent) => (
-                    <label key={percent} className="flex items-center cursor-pointer">
-                      <input
-                        type="radio"
-                        name="provision"
-                        checked={provisionPercent === percent}
-                        onChange={() => setProvisionPercent(percent)}
-                        className="mr-2 w-5 h-5 text-indigo-600 focus:ring-indigo-500"
-                      />
-                      <span className="text-gray-700 text-lg font-medium">{percent}%</span>
+                  {/* Provision Percentage */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-3">
+                      Provision Percentage
                     </label>
-                  ))}
-                </div>
-              </div>
+                    <div className="flex gap-4 flex-wrap">
+                      {provisionPercentages.map((percent) => (
+                        <label key={percent} className="flex items-center cursor-pointer">
+                          <input
+                            type="radio"
+                            name="provision"
+                            checked={provisionPercent === percent}
+                            onChange={() => setProvisionPercent(percent)}
+                            className="mr-2 w-5 h-5 text-indigo-600 focus:ring-indigo-500"
+                          />
+                          <span className="text-gray-700 text-lg font-medium">{percent}%</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <>
+                  {/* Custom Profit */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Custom Profit (CZK)
+                    </label>
+                    <input
+                      type="number"
+                      value={customProfit}
+                      onChange={(e) => setCustomProfit(e.target.value)}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                      placeholder="0"
+                      step="0.01"
+                    />
+                    <p className="text-xs text-gray-500 mt-1">
+                      Enter the profit amount directly (e.g., for referral projects)
+                    </p>
+                  </div>
+
+                  {/* Custom Cost */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Custom Cost (CZK)
+                    </label>
+                    <input
+                      type="number"
+                      value={customCost}
+                      onChange={(e) => setCustomCost(e.target.value)}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                      placeholder="0"
+                      step="0.01"
+                    />
+                    <p className="text-xs text-gray-500 mt-1">
+                      Enter the cost amount directly
+                    </p>
+                  </div>
+                </>
+              )}
 
               {/* Results Section */}
               <div className="mt-8 pt-6 border-t border-gray-200">
@@ -636,6 +893,7 @@ function App() {
                 )}
               </div>
             </div>
+            )}
           </div>
         ) : view === 'list' ? (
           <div className="bg-white rounded-lg shadow-xl p-6 md:p-8 animate-fadeIn">
@@ -821,6 +1079,13 @@ function App() {
                         </button>
                       </div>
                     </div>
+
+                    {project.client && (
+                      <div className="mb-4 pb-4 border-b border-gray-200">
+                        <p className="text-xs text-gray-500 mb-1">Client</p>
+                        <p className="font-semibold text-gray-800">{project.client}</p>
+                      </div>
+                    )}
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                       <div className="bg-gray-50 p-3 rounded-lg">
@@ -1388,6 +1653,24 @@ function App() {
               )
             })()}
           </div>
+        ) : view === 'kanban' ? (
+          <KanbanBoardView
+            projects={savedProjects}
+            teamMembers={teamMembers}
+            user={user}
+            onUpdateProject={async (id, updates) => {
+              try {
+                const updated = await api.updateProject(id, updates)
+                setSavedProjects(savedProjects.map(p => p.id === id ? updated : p))
+              } catch (err) {
+                console.error('Error updating project:', err)
+                setError('Failed to update project status')
+              }
+            }}
+            onEdit={handleEdit}
+            onArchive={handleArchive}
+            onDelete={handleDelete}
+          />
         ) : view === 'users' ? (
           <UserManagementView />
         ) : view === 'settings' ? (
@@ -1397,6 +1680,326 @@ function App() {
           />
         ) : null}
       </div>
+    </div>
+  )
+}
+
+// Kanban Board Component
+function KanbanBoardView({
+  projects,
+  teamMembers,
+  user,
+  onUpdateProject,
+  onEdit,
+  onArchive,
+  onDelete
+}: {
+  projects: SavedProject[]
+  teamMembers: User[]
+  user: User
+  onUpdateProject: (id: string, updates: Partial<SavedProject>) => Promise<void>
+  onEdit: (project: SavedProject) => void
+  onArchive: (id: string) => Promise<void>
+  onDelete: (id: string) => Promise<void>
+}) {
+  const [activeId, setActiveId] = useState<string | null>(null)
+  const sensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  )
+
+  // Filter projects based on user role
+  const filteredProjects = projects.filter(p => {
+    if (user.role === 'admin') return true
+    if (user.role === 'teamleader') {
+      const teamMemberIds = teamMembers.map(m => m.id)
+      return p.createdBy === user.id || teamMemberIds.includes(p.createdBy || '')
+    }
+    return p.createdBy === user.id
+  })
+
+  // Group projects by status
+  const columns = [
+    { id: 'pending-review', title: 'Pending Review', color: 'bg-yellow-100' },
+    { id: 'todo', title: 'To Do', color: 'bg-gray-100' },
+    { id: 'in-progress', title: 'In Progress', color: 'bg-blue-100' },
+    { id: 'done', title: 'Done', color: 'bg-green-100' },
+    { id: 'archived', title: 'Archived', color: 'bg-gray-200' },
+  ]
+
+  const getProjectsByStatus = (status: string) => {
+    return filteredProjects.filter(p => {
+      if (status === 'archived') return p.archived || p.status === 'archived'
+      // For pending-review, show projects with that status (even if archived flag is set, we want to see them)
+      if (status === 'pending-review') return p.status === 'pending-review'
+      return !p.archived && (p.status || 'todo') === status
+    })
+  }
+
+  const handleDragStart = (event: DragStartEvent) => {
+    setActiveId(event.active.id as string)
+  }
+
+  const handleDragEnd = async (event: DragEndEvent) => {
+    const { active, over } = event
+    setActiveId(null)
+
+    if (!over) return
+
+    const projectId = active.id as string
+    const newStatus = over.id as string
+
+    const project = projects.find(p => p.id === projectId)
+    if (!project) return
+
+    // Don't update if status hasn't changed
+    if ((project.status || 'todo') === newStatus && newStatus !== 'archived') return
+    if (project.archived && newStatus === 'archived') return
+
+    try {
+      if (newStatus === 'archived') {
+        await onArchive(projectId)
+      } else {
+        await onUpdateProject(projectId, { status: newStatus as any, archived: false })
+      }
+    } catch (err) {
+      console.error('Error updating project status:', err)
+    }
+  }
+
+  const activeProject = activeId ? projects.find(p => p.id === activeId) : null
+
+  return (
+    <div className="bg-white rounded-lg shadow-xl p-6 md:p-8 animate-fadeIn">
+      <h1 className="text-3xl font-bold text-gray-800 mb-2 animate-slideDown">Kanban Board</h1>
+      <p className="text-gray-600 mb-6 animate-slideUp">Drag and drop projects to change their status</p>
+
+      <DndContext
+        sensors={sensors}
+        collisionDetection={closestCorners}
+        onDragStart={handleDragStart}
+        onDragEnd={handleDragEnd}
+      >
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
+          {columns.map((column) => {
+            const columnProjects = getProjectsByStatus(column.id)
+            return (
+              <KanbanColumn
+                key={column.id}
+                id={column.id}
+                title={column.title}
+                color={column.color}
+                projects={columnProjects}
+                teamMembers={teamMembers}
+                onEdit={onEdit}
+                onArchive={onArchive}
+                onDelete={onDelete}
+              />
+            )
+          })}
+        </div>
+        <DragOverlay>
+          {activeProject ? (
+            <KanbanCard project={activeProject} teamMembers={teamMembers} isDragging />
+          ) : null}
+        </DragOverlay>
+      </DndContext>
+    </div>
+  )
+}
+
+// Kanban Column Component
+function KanbanColumn({
+  id,
+  title,
+  color,
+  projects,
+  teamMembers,
+  onEdit,
+  onArchive,
+  onDelete
+}: {
+  id: string
+  title: string
+  color: string
+  projects: SavedProject[]
+  teamMembers: User[]
+  onEdit: (project: SavedProject) => void
+  onArchive: (id: string) => Promise<void>
+  onDelete: (id: string) => Promise<void>
+}) {
+  return (
+    <div className={`${color} rounded-lg p-4 min-h-[500px]`}>
+      <div className="flex justify-between items-center mb-4">
+        <h2 className="font-semibold text-gray-800">{title}</h2>
+        <span className="bg-white px-2 py-1 rounded-full text-sm text-gray-600">
+          {projects.length}
+        </span>
+      </div>
+      <SortableContext items={projects.map(p => p.id)} strategy={verticalListSortingStrategy}>
+        <div className="space-y-3">
+          {projects.map((project) => (
+            <KanbanCard
+              key={project.id}
+              project={project}
+              teamMembers={teamMembers}
+              onEdit={onEdit}
+              onArchive={onArchive}
+              onDelete={onDelete}
+            />
+          ))}
+        </div>
+      </SortableContext>
+    </div>
+  )
+}
+
+// Kanban Card Component
+function KanbanCard({
+  project,
+  teamMembers,
+  isDragging = false,
+  onEdit,
+  onArchive,
+  onDelete
+}: {
+  project: SavedProject
+  teamMembers: User[]
+  isDragging?: boolean
+  onEdit?: (project: SavedProject) => void
+  onArchive?: (id: string) => Promise<void>
+  onDelete?: (id: string) => Promise<void>
+}) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging: isSortableDragging,
+  } = useSortable({ id: project.id })
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging || isSortableDragging ? 0.5 : 1,
+  }
+
+  const projectOwner = teamMembers.find(m => m.id === project.createdBy)
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      {...attributes}
+      {...listeners}
+      className={`bg-white rounded-lg p-4 shadow-md cursor-move hover:shadow-lg transition-all ${
+        isDragging || isSortableDragging ? 'opacity-50' : ''
+      }`}
+    >
+      <div className="mb-2">
+        <h3 className="font-semibold text-gray-800 text-sm mb-1">{project.projectName}</h3>
+        {project.client && (
+          <p className="text-xs text-gray-600 mb-1">Client: {project.client}</p>
+        )}
+        <div className="flex gap-1 flex-wrap">
+          {project.status === 'pending-review' && (
+            <span className="text-xs px-2 py-1 bg-yellow-200 text-yellow-900 rounded font-medium">
+              ⏳ Pending Review
+            </span>
+          )}
+          {project.projectType === 'custom' && (
+            <span className="text-xs px-2 py-1 bg-purple-100 text-purple-800 rounded">
+              Referral
+            </span>
+          )}
+          {project.crmDealId && (
+            <span className="text-xs px-2 py-1 bg-blue-100 text-blue-800 rounded">
+              CRM
+            </span>
+          )}
+        </div>
+      </div>
+      
+      <div className="space-y-1 mb-3">
+        <div className="text-xs text-gray-600">
+          <span className="font-medium">Provision:</span>{' '}
+          {project.provision.toLocaleString('cs-CZ', {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2,
+          })} CZK
+        </div>
+        {project.projectType === 'custom' ? (
+          <>
+            {project.customProfit && (
+              <div className="text-xs text-gray-600">
+                <span className="font-medium">Profit:</span>{' '}
+                {project.customProfit.toLocaleString('cs-CZ', {
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: 2,
+                })} CZK
+              </div>
+            )}
+            {project.customCost && (
+              <div className="text-xs text-gray-600">
+                <span className="font-medium">Cost:</span>{' '}
+                {project.customCost.toLocaleString('cs-CZ', {
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: 2,
+                })} CZK
+              </div>
+            )}
+          </>
+        ) : (
+          <div className="text-xs text-gray-600">
+            <span className="font-medium">MDs:</span> {project.numberOfMDs}
+          </div>
+        )}
+      </div>
+
+      {projectOwner && (
+        <div className="text-xs text-indigo-600 mb-2">
+          {projectOwner.name}
+        </div>
+      )}
+
+      {onEdit && onArchive && onDelete && (
+        <div className="flex gap-1 mt-2 pt-2 border-t border-gray-200">
+          <button
+            onClick={(e) => {
+              e.stopPropagation()
+              onEdit(project)
+            }}
+            className="flex-1 px-2 py-1 bg-indigo-600 text-white text-xs rounded hover:bg-indigo-700"
+          >
+            Edit
+          </button>
+          {!project.archived && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation()
+                onArchive(project.id)
+              }}
+              className="px-2 py-1 bg-yellow-600 text-white text-xs rounded hover:bg-yellow-700"
+            >
+              Archive
+            </button>
+          )}
+          <button
+            onClick={(e) => {
+              e.stopPropagation()
+              if (confirm('Delete this project?')) {
+                onDelete(project.id)
+              }
+            }}
+            className="px-2 py-1 bg-red-600 text-white text-xs rounded hover:bg-red-700"
+          >
+            Delete
+          </button>
+        </div>
+      )}
     </div>
   )
 }
@@ -1624,10 +2227,40 @@ function SettingsView({
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
+  
+  // CRM settings state
+  const [crmConfig, setCrmConfig] = useState<api.CrmConfig | null>(null)
+  const [crmType, setCrmType] = useState('raynet')
+  const [crmApiUrl, setCrmApiUrl] = useState('')
+  const [crmApiKey, setCrmApiKey] = useState('')
+  const [authMethod, setAuthMethod] = useState<'apiKey' | 'oauth' | 'manual'>('apiKey')
+  const [crmLoading, setCrmLoading] = useState(false)
+  const [crmError, setCrmError] = useState('')
+  const [crmSuccess, setCrmSuccess] = useState('')
+  const [testingConnection, setTestingConnection] = useState(false)
+  
+  // Manual import state
+  const [manualImportJson, setManualImportJson] = useState('')
+  const [importingManual, setImportingManual] = useState(false)
 
   useEffect(() => {
     setLocalPercentages(provisionPercentages.join(', '))
+    loadCrmConfig()
   }, [provisionPercentages])
+
+  const loadCrmConfig = async () => {
+    try {
+      const config = await api.getCrmConfig()
+      setCrmConfig(config)
+      if (config.configured) {
+        setCrmType(config.crmType || 'raynet')
+        setCrmApiUrl(config.apiUrl || '')
+        setAuthMethod(config.authMethod || 'apiKey')
+      }
+    } catch (err) {
+      console.error('Error loading CRM config:', err)
+    }
+  }
 
   const handleSave = async () => {
     setError('')
@@ -1651,6 +2284,117 @@ function SettingsView({
       setError(err.message || 'Failed to update provision percentages')
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleSaveCrmConfig = async () => {
+    setCrmError('')
+    setCrmSuccess('')
+    
+    if (authMethod === 'apiKey' && !crmApiUrl) {
+      setCrmError('API URL is required for API key authentication')
+      return
+    }
+
+    try {
+      setCrmLoading(true)
+      await api.updateCrmConfig({
+        crmType: crmType,
+        apiUrl: authMethod === 'apiKey' ? crmApiUrl : undefined,
+        apiKey: authMethod === 'apiKey' ? (crmApiKey || undefined) : undefined,
+        authMethod: authMethod,
+      })
+      setCrmSuccess('CRM configuration saved successfully!')
+      await loadCrmConfig()
+      setCrmApiKey('') // Clear the key field after saving
+    } catch (err: any) {
+      setCrmError(err.message || 'Failed to save CRM configuration')
+    } finally {
+      setCrmLoading(false)
+    }
+  }
+  
+  const handleManualImport = async () => {
+    setCrmError('')
+    setCrmSuccess('')
+    
+    if (!manualImportJson.trim()) {
+      setCrmError('Please paste JSON data or upload a file')
+      return
+    }
+
+    try {
+      setImportingManual(true)
+      let deals: any[]
+      
+      try {
+        const parsed = JSON.parse(manualImportJson)
+        // Handle different JSON structures
+        deals = Array.isArray(parsed) ? parsed : (parsed.data || parsed.items || parsed.deals || [])
+      } catch (parseError) {
+        setCrmError('Invalid JSON format. Please check your data.')
+        return
+      }
+
+      if (!Array.isArray(deals) || deals.length === 0) {
+        setCrmError('No deals found in the data. Make sure the JSON contains an array of deals.')
+        return
+      }
+
+      const result = await api.importCrmData(deals)
+      setCrmSuccess(`Successfully imported ${result.imported} project(s)! ${result.skipped > 0 ? `${result.skipped} skipped (duplicates).` : ''}`)
+      setManualImportJson('')
+      
+      // Reload projects
+      const projects = await api.getProjects()
+      setSavedProjects(projects)
+    } catch (err: any) {
+      setCrmError(err.message || 'Failed to import data')
+    } finally {
+      setImportingManual(false)
+    }
+  }
+  
+  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      const content = e.target?.result as string
+      setManualImportJson(content)
+    }
+    reader.onerror = () => {
+      setCrmError('Failed to read file')
+    }
+    reader.readAsText(file)
+  }
+
+  const handleTestConnection = async () => {
+    setCrmError('')
+    setCrmSuccess('')
+    
+    if (!crmApiUrl || !crmApiKey) {
+      setCrmError('API URL and API Key are required to test connection')
+      return
+    }
+
+    try {
+      setTestingConnection(true)
+      // Save config first if not saved
+      if (!crmConfig?.configured) {
+        await api.updateCrmConfig({
+          crmType: crmType,
+          apiUrl: crmApiUrl,
+          apiKey: crmApiKey,
+        })
+      }
+      const result = await api.testCrmConnection()
+      setCrmSuccess(result.message)
+    } catch (err: any) {
+      setCrmError(err.message || 'Failed to test connection')
+    } finally {
+      setTestingConnection(false)
     }
   }
 
@@ -1695,6 +2439,195 @@ function SettingsView({
         >
           {loading ? 'Saving...' : 'Save Provision Percentages'}
         </button>
+      </div>
+
+      {/* CRM Settings Section */}
+      <div className="mt-8 pt-8 border-t border-gray-200">
+        <h2 className="text-2xl font-bold text-gray-800 mb-2">CRM Integration</h2>
+        <p className="text-gray-600 mb-6">Configure CRM API connection (READ-ONLY integration)</p>
+
+        {crmError && (
+          <div className="mb-4 bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-lg">
+            {crmError}
+          </div>
+        )}
+
+        {crmSuccess && (
+          <div className="mb-4 bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded-lg">
+            {crmSuccess}
+          </div>
+        )}
+
+        <div className="space-y-6">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Authentication Method
+            </label>
+            <select
+              value={authMethod}
+              onChange={(e) => {
+                setAuthMethod(e.target.value as 'apiKey' | 'oauth' | 'manual')
+                if (e.target.value === 'manual') {
+                  setCrmApiUrl('')
+                  setCrmApiKey('')
+                }
+              }}
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg"
+            >
+              <option value="apiKey">API Key (Direct API Access)</option>
+              <option value="manual">Manual Import (No API - Export from Browser)</option>
+            </select>
+            <p className="text-xs text-gray-500 mt-1">
+              Choose how you want to connect to your CRM
+            </p>
+          </div>
+
+          {authMethod === 'apiKey' && (
+            <>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  CRM Type
+                </label>
+                <select
+                  value={crmType}
+                  onChange={(e) => setCrmType(e.target.value)}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg"
+                >
+                  <option value="raynet">Raynet</option>
+                  <option value="pipedrive">Pipedrive</option>
+                  <option value="hubspot">HubSpot</option>
+                  <option value="salesforce">Salesforce</option>
+                  <option value="custom">Custom</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  CRM API URL
+                </label>
+                <input
+                  type="text"
+                  value={crmApiUrl}
+                  onChange={(e) => setCrmApiUrl(e.target.value)}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg"
+                  placeholder="https://api.raynet.cz/v2"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Base URL for your CRM API (e.g., https://api.raynet.cz/v2)
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  API Key {crmConfig?.hasApiKey && <span className="text-gray-500">(leave empty to keep current)</span>}
+                </label>
+                <input
+                  type="password"
+                  value={crmApiKey}
+                  onChange={(e) => setCrmApiKey(e.target.value)}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg"
+                  placeholder={crmConfig?.hasApiKey ? "Enter new API key or leave empty" : "Enter API key"}
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Your CRM API key/token for authentication
+                </p>
+              </div>
+            </>
+          )}
+
+          {authMethod === 'manual' && (
+            <div className="space-y-4">
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <p className="text-sm text-blue-800 font-medium mb-2">How to use Manual Import:</p>
+                <ol className="text-xs text-blue-700 list-decimal list-inside space-y-1">
+                  <li>Log into your CRM via browser</li>
+                  <li>Export your deals/opportunities as JSON (or use browser DevTools to copy API response)</li>
+                  <li>Paste the JSON data below or upload a JSON file</li>
+                  <li>Click "Import Data" - only deals with <strong>stage = "won"</strong> will be imported</li>
+                </ol>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Upload JSON File
+                </label>
+                <input
+                  type="file"
+                  accept=".json,application/json"
+                  onChange={handleFileUpload}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Upload a JSON file exported from your CRM
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Or Paste JSON Data
+                </label>
+                <textarea
+                  value={manualImportJson}
+                  onChange={(e) => setManualImportJson(e.target.value)}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg font-mono text-sm"
+                  rows={10}
+                  placeholder='[{"id": 1, "name": "Deal Name", "stage": "won", "value": 10000, ...}, ...]'
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Paste JSON array of deals. Each deal should have: name, stage, value, etc.
+                </p>
+              </div>
+
+              <button
+                onClick={handleManualImport}
+                disabled={importingManual || !manualImportJson.trim()}
+                className="w-full px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50"
+              >
+                {importingManual ? 'Importing...' : 'Import Data'}
+              </button>
+            </div>
+          )}
+
+          {crmConfig?.configured && (
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+              <p className="text-sm text-blue-800">
+                <strong>Status:</strong> CRM is configured
+              </p>
+              <p className="text-xs text-blue-600 mt-1">
+                API URL: {crmConfig.apiUrl}
+              </p>
+            </div>
+          )}
+
+          {authMethod === 'apiKey' && (
+            <div className="flex gap-3">
+              <button
+                onClick={handleSaveCrmConfig}
+                disabled={crmLoading}
+                className="px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50"
+              >
+                {crmLoading ? 'Saving...' : 'Save CRM Configuration'}
+              </button>
+              <button
+                onClick={handleTestConnection}
+                disabled={testingConnection || !crmApiUrl || !crmApiKey}
+                className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50"
+              >
+                {testingConnection ? 'Testing...' : 'Test Connection'}
+              </button>
+            </div>
+          )}
+
+          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+            <p className="text-sm text-yellow-800">
+              <strong>⚠️ READ-ONLY Integration:</strong> This integration only reads data from your CRM. 
+              It will never write, modify, or delete anything in your CRM system.
+            </p>
+            <p className="text-xs text-yellow-700 mt-2">
+              The sync will import deals with <strong>stage = "won"</strong> as projects with "pending-review" status.
+            </p>
+          </div>
+        </div>
       </div>
     </div>
   )

@@ -19,6 +19,7 @@ const getAuthHeaders = (): HeadersInit => {
 export interface SavedProject {
   id: string
   projectName: string
+  projectType?: 'regular' | 'custom'
   invoicedTotal: string
   numberOfMDs: string
   mdRate: string
@@ -29,12 +30,18 @@ export interface SavedProject {
   cost: number
   provision: number
   invoicedTotalCZK: number
+  customProfit?: number
+  customCost?: number
+  status?: 'todo' | 'in-progress' | 'done' | 'pending-review' | 'archived'
   paymentReceivedDate: string
   invoiceDueDate: string
   createdAt: string
   createdBy?: string
   archived?: boolean
   archivedAt?: string
+  crmDealId?: string
+  crmSyncedAt?: string
+  client?: string
 }
 
 export interface User {
@@ -230,5 +237,162 @@ export const unarchiveProject = async (id: string): Promise<SavedProject> => {
     headers: getAuthHeaders(),
   })
   if (!response.ok) throw new Error('Failed to unarchive project')
+  return await response.json()
+}
+
+// CRM Integration API (READ-ONLY - only reads from CRM, never writes)
+export interface CrmConfig {
+  configured: boolean
+  crmType?: string
+  apiUrl?: string
+  hasApiKey?: boolean
+  authMethod?: 'apiKey' | 'oauth' | 'manual'
+  hasOauthToken?: boolean
+}
+
+export interface CrmSyncResult {
+  success: boolean
+  imported: number
+  skipped: number
+  details: {
+    new: string[]
+    skipped: Array<{ name: string; reason: string }>
+  }
+}
+
+// Get CRM configuration
+export const getCrmConfig = async (): Promise<CrmConfig> => {
+  const response = await fetch(`${API_BASE_URL}/crm/config`, {
+    headers: getAuthHeaders(),
+  })
+  if (!response.ok) throw new Error('Failed to fetch CRM configuration')
+  return await response.json()
+}
+
+// Update CRM configuration
+export const updateCrmConfig = async (config: {
+  crmType: string
+  apiUrl?: string
+  apiKey?: string
+  authMethod?: 'apiKey' | 'oauth' | 'manual'
+  oauthToken?: string
+}): Promise<{ success: boolean; configured: boolean }> => {
+  const response = await fetch(`${API_BASE_URL}/crm/config`, {
+    method: 'POST',
+    headers: getAuthHeaders(),
+    body: JSON.stringify(config),
+  })
+  if (!response.ok) {
+    const error = await response.json()
+    throw new Error(error.error || 'Failed to update CRM configuration')
+  }
+  return await response.json()
+}
+
+// Manual import from JSON data
+export const importCrmData = async (deals: any[]): Promise<CrmSyncResult> => {
+  const response = await fetch(`${API_BASE_URL}/crm/import`, {
+    method: 'POST',
+    headers: getAuthHeaders(),
+    body: JSON.stringify({ deals }),
+  })
+  if (!response.ok) {
+    const error = await response.json()
+    throw new Error(error.error || 'Failed to import CRM data')
+  }
+  return await response.json()
+}
+
+// Sync with CRM (READ-ONLY: Only reads from CRM, creates projects in KLAUS with "pending-review" status)
+export const syncCrm = async (): Promise<CrmSyncResult> => {
+  const response = await fetch(`${API_BASE_URL}/crm/sync`, {
+    method: 'POST',
+    headers: getAuthHeaders(),
+  })
+  if (!response.ok) {
+    const error = await response.json()
+    throw new Error(error.error || error.message || 'Failed to sync with CRM')
+  }
+  return await response.json()
+}
+
+// Test CRM connection (READ-ONLY)
+export const testCrmConnection = async (): Promise<{ success: boolean; message: string }> => {
+  const response = await fetch(`${API_BASE_URL}/crm/test`, {
+    method: 'POST',
+    headers: getAuthHeaders(),
+  })
+  if (!response.ok) {
+    const error = await response.json()
+    throw new Error(error.message || 'Failed to test CRM connection')
+  }
+  return await response.json()
+}
+
+// Invoice upload and extraction
+export interface ExtractedInvoiceData {
+  projectName: string
+  invoicedTotal: string
+  currency: 'CZK' | 'EUR'
+  exchangeRate: string
+  invoiceDate: string
+  invoiceDueDate: string
+  invoiceNumber: string
+  numberOfMDs?: string  // Počet MJ
+  mdRate?: string       // Cena MJ
+  client?: string       // Odběratel / Client
+}
+
+export interface InvoiceUploadResponse {
+  success: boolean
+  extractedData: ExtractedInvoiceData
+  rawText?: string
+  extractionId?: string
+}
+
+export interface InvoiceFeedback {
+  extractionId: string
+  rawText: string
+  extractedData: ExtractedInvoiceData
+  correctedData: ExtractedInvoiceData
+}
+
+export const uploadInvoice = async (file: File): Promise<InvoiceUploadResponse> => {
+  const formData = new FormData()
+  formData.append('invoice', file)
+
+  const token = getAuthToken()
+  const headers: HeadersInit = {}
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`
+  }
+
+  const response = await fetch(`${API_BASE_URL}/invoices/upload`, {
+    method: 'POST',
+    headers,
+    body: formData,
+  })
+  
+  if (!response.ok) {
+    const error = await response.json()
+    throw new Error(error.error || 'Failed to upload and extract invoice')
+  }
+  
+  return await response.json()
+}
+
+// Submit feedback for ML learning
+export const submitInvoiceFeedback = async (feedback: InvoiceFeedback): Promise<{ success: boolean; message: string }> => {
+  const response = await fetch(`${API_BASE_URL}/invoices/feedback`, {
+    method: 'POST',
+    headers: getAuthHeaders(),
+    body: JSON.stringify(feedback),
+  })
+  
+  if (!response.ok) {
+    const error = await response.json()
+    throw new Error(error.error || 'Failed to submit feedback')
+  }
+  
   return await response.json()
 }

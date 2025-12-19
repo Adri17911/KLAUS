@@ -71,11 +71,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     })
 
     if (!response.ok) {
-      const error = await response.json()
-      throw new Error(error.error || 'Login failed')
+      let errorMessage = 'Login failed'
+      try {
+        const error = await response.json()
+        errorMessage = error.error || errorMessage
+      } catch (e) {
+        // If response is not valid JSON, use status text
+        errorMessage = response.statusText || errorMessage
+      }
+      throw new Error(errorMessage)
     }
 
-    const data = await response.json()
+    let data
+    try {
+      const text = await response.text()
+      if (!text) {
+        throw new Error('Empty response from server')
+      }
+      data = JSON.parse(text)
+    } catch (e) {
+      throw new Error('Invalid response from server')
+    }
+
     setToken(data.token)
     setUser(data.user)
     localStorage.setItem('klaus_token', data.token)

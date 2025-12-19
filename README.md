@@ -88,8 +88,34 @@ docker-compose down
 
 - **Frontend**: React app served by nginx (port 3000)
 - **Backend**: Express API server (port 3001, internal)
+- **ML Service**: Python Flask service for ML-based invoice extraction (port 5000, optional)
 - **Data Storage**: JSON files in `server/data/` directory
 - **API Proxy**: nginx proxies `/api/*` requests to the backend
+
+### ML Service (Optional)
+
+The ML service provides improved invoice extraction using machine learning:
+
+1. **Start the ML service:**
+```bash
+cd ml-service
+pip install -r requirements.txt
+python ml_service.py
+```
+
+Or use the start script:
+```bash
+cd ml-service
+./start.sh
+```
+
+2. **Train the model** (after collecting feedback):
+```bash
+cd ml-service
+python train_model.py
+```
+
+The backend will automatically use the ML service if it's running, otherwise it falls back to regex-based extraction.
 
 ## Usage
 
