@@ -406,6 +406,25 @@ function App() {
     }
   }
 
+  // Claim commission - moves project to in-progress status
+  const handleClaimCommission = async (id: string) => {
+    try {
+      const project = savedProjects.find(p => p.id === id)
+      if (!project) return
+
+      const updatedProject = await api.updateProject(id, {
+        status: 'in-progress',
+      })
+
+      setSavedProjects(savedProjects.map(p => p.id === id ? updatedProject : p))
+      showSuccess(`Commission claimed! Project "${project.projectName}" moved to "In Progress".`)
+    } catch (err) {
+      console.error('Error claiming commission:', err)
+      setError('Failed to claim commission')
+      showError('Failed to claim commission. Please try again.')
+    }
+  }
+
   // Generate commission report for in-progress projects
   const generateCommissionReport = () => {
     if (!user) {
@@ -1286,6 +1305,14 @@ function App() {
                         )}
                       </div>
                       <div className="flex gap-2">
+                        {project.status !== 'in-progress' && (
+                          <button
+                            onClick={() => handleClaimCommission(project.id)}
+                            className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-all hover:scale-105 active:scale-95 text-sm shadow-md hover:shadow-lg font-medium"
+                          >
+                            💰 Claim Commission
+                          </button>
+                        )}
                         <button
                           onClick={() => handleTogglePaid(project.id)}
                           className={`px-4 py-2 rounded-lg transition-all hover:scale-105 active:scale-95 text-sm shadow-md hover:shadow-lg font-medium ${
@@ -1946,6 +1973,7 @@ function App() {
             onArchive={handleArchive}
             onDelete={handleDelete}
             onTogglePaid={handleTogglePaid}
+            onClaimCommission={handleClaimCommission}
           />
         ) : view === 'users' ? (
           <UserManagementView />
@@ -1970,7 +1998,8 @@ function KanbanBoardView({
   onEdit,
   onArchive,
   onDelete,
-  onTogglePaid
+  onTogglePaid,
+  onClaimCommission
 }: {
   projects: SavedProject[]
   teamMembers: User[]
@@ -1980,6 +2009,7 @@ function KanbanBoardView({
   onArchive: (id: string) => Promise<void>
   onDelete: (id: string) => Promise<void>
   onTogglePaid: (id: string) => Promise<void>
+  onClaimCommission: (id: string) => Promise<void>
 }) {
   const [activeId, setActiveId] = useState<string | null>(null)
   const sensors = useSensors(
@@ -2076,6 +2106,7 @@ function KanbanBoardView({
                 onArchive={onArchive}
                 onDelete={onDelete}
                 onTogglePaid={onTogglePaid}
+                onClaimCommission={onClaimCommission}
               />
             )
           })}
@@ -2087,6 +2118,7 @@ function KanbanBoardView({
               teamMembers={teamMembers} 
               isDragging
               onTogglePaid={onTogglePaid}
+              onClaimCommission={onClaimCommission}
             />
           ) : null}
         </DragOverlay>
@@ -2105,7 +2137,8 @@ function KanbanColumn({
   onEdit,
   onArchive,
   onDelete,
-  onTogglePaid
+  onTogglePaid,
+  onClaimCommission
 }: {
   id: string
   title: string
@@ -2116,6 +2149,7 @@ function KanbanColumn({
   onArchive: (id: string) => Promise<void>
   onDelete: (id: string) => Promise<void>
   onTogglePaid?: (id: string) => Promise<void>
+  onClaimCommission?: (id: string) => void
 }) {
   return (
     <div className={`${color} rounded-lg p-4 min-h-[500px]`}>
@@ -2136,6 +2170,7 @@ function KanbanColumn({
               onArchive={onArchive}
               onDelete={onDelete}
               onTogglePaid={onTogglePaid}
+              onClaimCommission={onClaimCommission}
             />
           ))}
         </div>
@@ -2152,7 +2187,8 @@ function KanbanCard({
   onEdit,
   onArchive,
   onDelete,
-  onTogglePaid
+  onTogglePaid,
+  onClaimCommission
 }: {
   project: SavedProject
   teamMembers: User[]
@@ -2161,6 +2197,7 @@ function KanbanCard({
   onArchive?: (id: string) => Promise<void>
   onDelete?: (id: string) => Promise<void>
   onTogglePaid?: (id: string) => Promise<void>
+  onClaimCommission?: (id: string) => void
 }) {
   const {
     attributes,
@@ -2184,8 +2221,7 @@ function KanbanCard({
       ref={setNodeRef}
       style={style}
       {...attributes}
-      {...listeners}
-      className={`bg-white rounded-lg p-4 shadow-md cursor-move hover:shadow-lg transition-all ${
+      className={`bg-white rounded-lg p-4 shadow-md hover:shadow-lg transition-all ${
         isDragging || isSortableDragging ? 'opacity-50' : ''
       } ${
         project.paid 
@@ -2193,6 +2229,16 @@ function KanbanCard({
           : 'border border-gray-200'
       }`}
     >
+      {/* Drag handle */}
+      <div 
+        {...listeners}
+        className="cursor-move mb-2 pb-2 border-b border-gray-200"
+      >
+        <div className="flex items-center gap-1 text-gray-400">
+          <span className="text-xs">⋮⋮</span>
+          <span className="text-xs">Drag to move</span>
+        </div>
+      </div>
       <div className="mb-2">
         <div className="flex items-center justify-between mb-1">
           <h3 className="font-semibold text-gray-800 text-sm">{project.projectName}</h3>
@@ -2268,6 +2314,17 @@ function KanbanCard({
 
       {onEdit && onArchive && onDelete && (
         <div className="flex flex-col gap-1 mt-2 pt-2 border-t border-gray-200">
+          {onClaimCommission && project.status === 'in-progress' && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation()
+                onClaimCommission(project.id)
+              }}
+              className="w-full px-2 py-1.5 text-xs rounded font-medium transition-all bg-indigo-600 text-white hover:bg-indigo-700"
+            >
+              💰 Claim Commission
+            </button>
+          )}
           {onTogglePaid && (
             <button
               onClick={(e) => {
