@@ -1,0 +1,68 @@
+# KLAUS Application Requirements
+# This file documents all dependencies for the KLAUS project
+
+# ============================================================================
+# Python ML Service Dependencies
+# ============================================================================
+# Install with: pip install -r requirements.txt
+# Or use the ML service's own requirements: cd ml-service && pip install -r requirements.txt
+
+# Core ML Service
+Flask==3.0.0
+flask-cors==4.0.0
+pdfplumber==0.10.3
+
+# Optional ML libraries (uncomment if you want to add ML features)
+# scikit-learn==1.3.2
+# numpy==1.24.3
+# pandas==2.1.4
+# spacy>=3.7.0
+
+# ============================================================================
+# Node.js Dependencies
+# ============================================================================
+# Frontend dependencies are in package.json
+# Backend dependencies are in server/package.json
+# Install with: npm install (for frontend) and cd server && npm install (for backend)
+
+# Frontend (see package.json):
+# - React 18.2.0
+# - Vite 5.0.0
+# - TypeScript 5.3.0
+# - Tailwind CSS 3.4.0
+# - @dnd-kit (drag and drop)
+# - recharts (charts)
+
+# Backend (see server/package.json):
+# - Express 4.18.2
+# - cors 2.8.5
+# - bcryptjs 2.4.3
+# - multer 2.0.2 (file uploads)
+# - pdf-parse 1.1.1 (PDF parsing)
+
+# ============================================================================
+# System Requirements
+# ============================================================================
+# - Node.js 18+ (for frontend and backend)
+# - Python 3.8+ (for ML service)
+# - npm or yarn (package manager)
+
+# ============================================================================
+# Installation Instructions
+# ============================================================================
+# 
+# 1. Install Node.js dependencies:
+#    npm install
+#    cd server && npm install
+#
+# 2. Install Python ML service dependencies:
+#    cd ml-service
+#    python3 -m venv venv
+#    source venv/bin/activate  # On Windows: venv\Scripts\activate
+#    pip install -r requirements.txt
+#
+# 3. Start services:
+#    - Frontend: npm run dev (from root)
+#    - Backend: cd server && npm start
+#    - ML Service: cd ml-service && source venv/bin/activate && python ml_service.py
+

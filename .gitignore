@@ -35,3 +35,10 @@ server/data/*.json
 *.tmp
 .cache/
 
+# Test coverage
+coverage/
+*.lcov
+.nyc_output/
+
+# Test data
+server/__tests__/test-data/

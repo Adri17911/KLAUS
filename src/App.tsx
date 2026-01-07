@@ -2,8 +2,12 @@ import { useState, useEffect } from 'react'
 import * as api from './services/api'
 import type { SavedProject, User, ExtractedInvoiceData } from './services/api'
 import { useAuth } from './contexts/AuthContext'
+import { useNotifications } from './contexts/NotificationContext'
 import Login from './components/Login'
 import InvoiceUpload from './components/InvoiceUpload'
+import NotificationContainer from './components/NotificationContainer'
+import MobileNavigation from './components/MobileNavigation'
+import DesktopNavigation from './components/DesktopNavigation'
 import {
   DndContext,
   DragOverlay,
@@ -44,6 +48,7 @@ type ProjectType = 'regular' | 'custom'
 
 function App() {
   const { user, loading: authLoading, logout, canManageUsers, canManageProvision } = useAuth()
+  const { notifications, showSuccess, showError, showWarning, showInfo, dismissNotification } = useNotifications()
   const [view, setView] = useState<View>('calculator')
   const [editingId, setEditingId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
@@ -193,17 +198,17 @@ function App() {
   // Save project
   const handleSaveProject = async () => {
     if (!projectName) {
-      alert('Please fill in project name')
+      showWarning('Please fill in project name')
       return
     }
     
     if (projectType === 'regular' && provisionPercent === null) {
-      alert('Please select provision percentage')
+      showWarning('Please select provision percentage')
       return
     }
     
     if (projectType === 'custom' && (!customProfit || !customCost)) {
-      alert('Please fill in custom profit and custom cost for referral projects')
+      showWarning('Please fill in custom profit and custom cost for referral projects')
       return
     }
 
@@ -233,10 +238,11 @@ function App() {
       setSavedProjects([...savedProjects, newProject])
       resetForm()
       setView('list')
+      showSuccess('Project saved successfully')
     } catch (err) {
       setError('Failed to save project')
       console.error('Error saving project:', err)
-      alert('Failed to save project. Please try again.')
+      showError('Failed to save project. Please try again.')
     }
   }
 
@@ -310,17 +316,17 @@ function App() {
   // Update project
   const handleUpdateProject = async () => {
     if (!editingId || !projectName) {
-      alert('Please fill in project name')
+      showWarning('Please fill in project name')
       return
     }
     
     if (projectType === 'regular' && provisionPercent === null) {
-      alert('Please select provision percentage')
+      showWarning('Please select provision percentage')
       return
     }
     
     if (projectType === 'custom' && (!customProfit || !customCost)) {
-      alert('Please fill in custom profit and custom cost for referral projects')
+      showWarning('Please fill in custom profit and custom cost for referral projects')
       return
     }
 
@@ -355,10 +361,11 @@ function App() {
       setEditingId(null)
       resetForm()
       setView('list')
+      showSuccess('Project updated successfully')
     } catch (err) {
       setError('Failed to update project')
       console.error('Error updating project:', err)
-      alert('Failed to update project. Please try again.')
+      showError('Failed to update project. Please try again.')
     }
   }
 
@@ -385,10 +392,11 @@ function App() {
       setError(null)
       const updatedProject = await api.archiveProject(id)
       setSavedProjects(savedProjects.map(p => p.id === id ? updatedProject : p))
+      showSuccess('Project archived successfully')
     } catch (err) {
       setError('Failed to archive project')
       console.error('Error archiving project:', err)
-      alert('Failed to archive project. Please try again.')
+      showError('Failed to archive project. Please try again.')
     }
   }
 
@@ -398,10 +406,11 @@ function App() {
       setError(null)
       const updatedProject = await api.unarchiveProject(id)
       setSavedProjects(savedProjects.map(p => p.id === id ? updatedProject : p))
+      showSuccess('Project unarchived successfully')
     } catch (err) {
       setError('Failed to unarchive project')
       console.error('Error unarchiving project:', err)
-      alert('Failed to unarchive project. Please try again.')
+      showError('Failed to unarchive project. Please try again.')
     }
   }
 
@@ -415,10 +424,11 @@ function App() {
       setError(null)
       await api.deleteProject(id)
       setSavedProjects(savedProjects.filter(p => p.id !== id))
+      showSuccess('Project deleted successfully')
     } catch (err) {
       setError('Failed to delete project')
       console.error('Error deleting project:', err)
-      alert('Failed to delete project. Please try again.')
+      showError('Failed to delete project. Please try again.')
     }
   }
 
@@ -428,7 +438,7 @@ function App() {
       // Check if manual mode is configured
       const config = await api.getCrmConfig()
       if (config.configured && config.authMethod === 'manual') {
-        alert('Manual import mode is configured. Please use the "Import Data" button in Settings instead.')
+        showWarning('Manual import mode is configured. Please use the "Import Data" button in Settings instead.')
         setView('settings')
         return
       }
@@ -449,7 +459,11 @@ function App() {
       const projects = await api.getProjects()
       setSavedProjects(projects)
       
-      alert(`CRM Sync completed!\n\nImported: ${result.imported} project(s)\nSkipped: ${result.skipped} project(s)`)
+      if (result.imported > 0) {
+        showSuccess(`CRM Sync completed! Imported: ${result.imported} project(s), Skipped: ${result.skipped} project(s)`)
+      } else {
+        showInfo(`CRM Sync completed. No new projects imported. Skipped: ${result.skipped} project(s)`)
+      }
       
       // Switch to kanban view to see pending-review projects
       if (result.imported > 0) {
@@ -458,7 +472,7 @@ function App() {
     } catch (err: any) {
       setError(err.message || 'Failed to sync with CRM')
       console.error('Error syncing CRM:', err)
-      alert(`Failed to sync with CRM: ${err.message || 'Unknown error'}`)
+      showError(`Failed to sync with CRM: ${err.message || 'Unknown error'}`)
     } finally {
       setSyncingCrm(false)
     }
@@ -492,7 +506,8 @@ function App() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 py-8 px-4">
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 py-4 md:py-8 px-2 md:px-4 pb-20 md:pb-8">
+      <NotificationContainer notifications={notifications} onDismiss={dismissNotification} />
       <div className="max-w-4xl mx-auto">
         {/* Error message */}
         {error && (
@@ -510,80 +525,43 @@ function App() {
         {/* Navigation */}
         <div className="mb-6">
           <div className="flex justify-between items-center mb-4">
-            <div></div>
+            <div className="md:hidden">
+              <h1 className="text-xl font-bold text-gray-800">KLAUS</h1>
+            </div>
             <UserProfileMenu user={user} logout={logout} canManageUsers={canManageUsers()} canManageProvision={canManageProvision()} onNavigate={setView} />
           </div>
-          <div className="flex gap-4 justify-center flex-wrap">
-            <button
-              onClick={() => {
-                setView('calculator')
-                if (!editingId) resetForm()
-                setEditingId(null)
-              }}
-              className={`px-6 py-2 rounded-lg font-medium transition-all duration-300 hover:scale-105 active:scale-95 ${
-                view === 'calculator'
-                  ? 'bg-indigo-600 text-white shadow-lg'
-                  : 'bg-white text-gray-700 hover:bg-gray-50 shadow-md hover:shadow-lg'
-              }`}
-            >
-              Calculator
-            </button>
-            <button
-              onClick={() => setView('list')}
-              className={`px-6 py-2 rounded-lg font-medium transition-all duration-300 hover:scale-105 active:scale-95 ${
-                view === 'list'
-                  ? 'bg-indigo-600 text-white shadow-lg'
-                  : 'bg-white text-gray-700 hover:bg-gray-50 shadow-md hover:shadow-lg'
-              }`}
-            >
-              Payable Commissions ({savedProjects.filter(p => !p.archived).length})
-            </button>
-            <button
-              onClick={() => setView('kanban')}
-              className={`px-6 py-2 rounded-lg font-medium transition-all duration-300 hover:scale-105 active:scale-95 ${
-                view === 'kanban'
-                  ? 'bg-indigo-600 text-white shadow-lg'
-                  : 'bg-white text-gray-700 hover:bg-gray-50 shadow-md hover:shadow-lg'
-              }`}
-            >
-              Kanban Board
-            </button>
-            {(user.role === 'admin' || user.role === 'teamleader') && (
-              <button
-                onClick={handleSyncCrm}
-                disabled={syncingCrm}
-                className={`px-6 py-2 rounded-lg font-medium transition-all duration-300 hover:scale-105 active:scale-95 ${
-                  syncingCrm
-                    ? 'bg-gray-400 text-white cursor-not-allowed'
-                    : 'bg-green-600 text-white shadow-md hover:shadow-lg hover:bg-green-700'
-                }`}
-              >
-                {syncingCrm ? 'Syncing...' : '🔄 Sync CRM'}
-              </button>
-            )}
-            <button
-              onClick={() => setView('overview')}
-              className={`px-6 py-2 rounded-lg font-medium transition-all duration-300 hover:scale-105 active:scale-95 ${
-                view === 'overview'
-                  ? 'bg-indigo-600 text-white shadow-lg'
-                  : 'bg-white text-gray-700 hover:bg-gray-50 shadow-md hover:shadow-lg'
-              }`}
-            >
-              Overview
-            </button>
-            {canManageProvision() && (
-              <button
-                onClick={() => setView('settings')}
-                className={`px-6 py-2 rounded-lg font-medium transition-all duration-300 hover:scale-105 active:scale-95 ${
-                  view === 'settings'
-                    ? 'bg-indigo-600 text-white shadow-lg'
-                    : 'bg-white text-gray-700 hover:bg-gray-50 shadow-md hover:shadow-lg'
-                }`}
-              >
-                Settings
-              </button>
-            )}
-          </div>
+          
+          {/* Desktop Navigation */}
+          <DesktopNavigation
+            currentView={view}
+            onNavigate={(v) => {
+              setView(v as View)
+              if (v === 'calculator' && !editingId) resetForm()
+              setEditingId(null)
+            }}
+            projectCount={savedProjects.filter(p => !p.archived).length}
+            canManageUsers={canManageUsers()}
+            canManageProvision={canManageProvision()}
+            onSyncCrm={(user.role === 'admin' || user.role === 'teamleader') ? handleSyncCrm : undefined}
+            syncingCrm={syncingCrm}
+            onResetForm={resetForm}
+            editingId={editingId}
+          />
+          
+          {/* Mobile Navigation */}
+          <MobileNavigation
+            currentView={view}
+            onNavigate={(v) => {
+              setView(v as View)
+              if (v === 'calculator' && !editingId) resetForm()
+              setEditingId(null)
+            }}
+            projectCount={savedProjects.filter(p => !p.archived).length}
+            canManageUsers={canManageUsers()}
+            canManageProvision={canManageProvision()}
+            onSyncCrm={(user.role === 'admin' || user.role === 'teamleader') ? handleSyncCrm : undefined}
+            syncingCrm={syncingCrm}
+          />
         </div>
 
         {view === 'calculator' ? (
