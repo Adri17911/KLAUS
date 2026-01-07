@@ -466,6 +466,10 @@ function App() {
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Commission Report - ${reportDate}</title>
   <style>
+    @page {
+      size: A4;
+      margin: 10mm;
+    }
     body {
       font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
       max-width: 900px;
@@ -476,55 +480,65 @@ function App() {
     }
     h1 {
       color: #4338ca;
-      border-bottom: 3px solid #6366f1;
-      padding-bottom: 10px;
-      margin-bottom: 30px;
+      border-bottom: 2px solid #6366f1;
+      padding-bottom: 6px;
+      margin-bottom: 12px;
+      font-size: 20px;
+    }
+    h2 {
+      font-size: 14px;
+      margin: 8px 0;
     }
     .report-header {
-      margin-bottom: 30px;
-      padding: 20px;
+      margin-bottom: 12px;
+      padding: 10px;
       background: #f8fafc;
-      border-left: 4px solid #6366f1;
+      border-left: 3px solid #6366f1;
+      font-size: 10px;
     }
     .report-header p {
-      margin: 5px 0;
+      margin: 3px 0;
       color: #64748b;
     }
     .summary {
       background: #eff6ff;
-      padding: 20px;
-      border-radius: 8px;
-      margin-bottom: 30px;
-      border: 2px solid #3b82f6;
+      padding: 10px;
+      border-radius: 4px;
+      margin-bottom: 12px;
+      border: 1px solid #3b82f6;
     }
     .summary h2 {
       margin-top: 0;
+      margin-bottom: 6px;
       color: #1e40af;
+      font-size: 13px;
     }
     .total {
-      font-size: 24px;
+      font-size: 18px;
       font-weight: bold;
       color: #1e40af;
-      margin-top: 10px;
+      margin-top: 4px;
     }
     table {
       width: 100%;
       border-collapse: collapse;
-      margin-bottom: 30px;
-      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+      margin-bottom: 12px;
+      font-size: 9px;
     }
     thead {
       background: #4338ca;
       color: white;
     }
     th {
-      padding: 12px;
+      padding: 6px 4px;
       text-align: left;
       font-weight: 600;
+      font-size: 9px;
     }
     td {
-      padding: 12px;
+      padding: 5px 4px;
       border-bottom: 1px solid #e2e8f0;
+      font-size: 9px;
     }
     tbody tr:hover {
       background: #f8fafc;
@@ -532,10 +546,11 @@ function App() {
     .project-name {
       font-weight: 600;
       color: #1e293b;
+      font-size: 9px;
     }
     .client-name {
       color: #64748b;
-      font-size: 0.9em;
+      font-size: 8px;
     }
     .commission {
       font-weight: 600;
@@ -544,13 +559,14 @@ function App() {
     .amount {
       text-align: right;
       font-family: 'Courier New', monospace;
+      white-space: nowrap;
     }
     .footer {
-      margin-top: 40px;
-      padding-top: 20px;
-      border-top: 2px solid #e2e8f0;
+      margin-top: 8px;
+      padding-top: 8px;
+      border-top: 1px solid #e2e8f0;
       color: #64748b;
-      font-size: 0.9em;
+      font-size: 8px;
       text-align: center;
     }
     .print-button {
@@ -579,10 +595,38 @@ function App() {
     }
     @media print {
       body {
-        padding: 20px;
+        padding: 0;
+        margin: 0;
       }
       .no-print, .print-button {
         display: none;
+      }
+      h1 {
+        font-size: 18px;
+        margin-bottom: 10px;
+      }
+      h2 {
+        font-size: 13px;
+        margin: 6px 0;
+      }
+      .report-header {
+        padding: 8px;
+        margin-bottom: 10px;
+      }
+      .summary {
+        padding: 8px;
+        margin-bottom: 10px;
+      }
+      table {
+        font-size: 8px;
+      }
+      th, td {
+        padding: 4px 3px;
+        font-size: 8px;
+      }
+      .footer {
+        margin-top: 6px;
+        font-size: 7px;
       }
     }
   </style>
