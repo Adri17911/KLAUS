@@ -233,6 +233,7 @@ function App() {
         paymentReceivedDate: '',
         invoiceDueDate: '',
         client: extractedClient || undefined,
+        paid: false,
       })
 
       setSavedProjects([...savedProjects, newProject])
@@ -383,6 +384,25 @@ function App() {
     } catch (err) {
       console.error('Error updating dates:', err)
       setError('Failed to update date')
+    }
+  }
+
+  // Toggle paid status
+  const handleTogglePaid = async (id: string) => {
+    try {
+      const project = savedProjects.find(p => p.id === id)
+      if (!project) return
+
+      const updatedProject = await api.updateProject(id, {
+        paid: !project.paid,
+      })
+
+      setSavedProjects(savedProjects.map(p => p.id === id ? updatedProject : p))
+      showSuccess(updatedProject.paid ? 'Project marked as paid' : 'Project marked as not paid')
+    } catch (err) {
+      console.error('Error updating paid status:', err)
+      setError('Failed to update paid status')
+      showError('Failed to update paid status. Please try again.')
     }
   }
 
@@ -1002,6 +1022,8 @@ function App() {
                     className={`border rounded-lg p-6 transition-all duration-300 hover:shadow-lg hover:scale-[1.01] ${
                       project.archived 
                         ? 'border-gray-300 bg-gray-50 opacity-75' 
+                        : project.paid
+                        ? 'border-2 border-green-500 bg-green-50'
                         : 'border-gray-200 bg-white'
                     } animate-slideIn`}
                     style={{ animationDelay: `${index * 50}ms` }}
@@ -1012,6 +1034,11 @@ function App() {
                           <h3 className="text-xl font-semibold text-gray-800">
                             {project.projectName}
                           </h3>
+                          {project.paid && (
+                            <span className="px-3 py-1 bg-green-500 text-white text-sm rounded-full font-medium">
+                              ✓ Paid
+                            </span>
+                          )}
                           {project.archived && (
                             <span className="px-2 py-1 bg-gray-200 text-gray-600 text-xs rounded-full animate-pulse">
                               Archived
@@ -1028,6 +1055,16 @@ function App() {
                         )}
                       </div>
                       <div className="flex gap-2">
+                        <button
+                          onClick={() => handleTogglePaid(project.id)}
+                          className={`px-4 py-2 rounded-lg transition-all hover:scale-105 active:scale-95 text-sm shadow-md hover:shadow-lg font-medium ${
+                            project.paid
+                              ? 'bg-green-600 text-white hover:bg-green-700'
+                              : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                          }`}
+                        >
+                          {project.paid ? '✓ Paid' : 'Mark as Paid'}
+                        </button>
                         <button
                           onClick={() => handleEdit(project)}
                           className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-all hover:scale-105 active:scale-95 text-sm shadow-md hover:shadow-lg"
@@ -1648,6 +1685,7 @@ function App() {
             onEdit={handleEdit}
             onArchive={handleArchive}
             onDelete={handleDelete}
+            onTogglePaid={handleTogglePaid}
           />
         ) : view === 'users' ? (
           <UserManagementView />
@@ -1671,7 +1709,8 @@ function KanbanBoardView({
   onUpdateProject,
   onEdit,
   onArchive,
-  onDelete
+  onDelete,
+  onTogglePaid
 }: {
   projects: SavedProject[]
   teamMembers: User[]
@@ -1680,6 +1719,7 @@ function KanbanBoardView({
   onEdit: (project: SavedProject) => void
   onArchive: (id: string) => Promise<void>
   onDelete: (id: string) => Promise<void>
+  onTogglePaid: (id: string) => Promise<void>
 }) {
   const [activeId, setActiveId] = useState<string | null>(null)
   const sensors = useSensors(
@@ -1827,6 +1867,7 @@ function KanbanColumn({
               onEdit={onEdit}
               onArchive={onArchive}
               onDelete={onDelete}
+              onTogglePaid={onTogglePaid}
             />
           ))}
         </div>
@@ -1842,7 +1883,8 @@ function KanbanCard({
   isDragging = false,
   onEdit,
   onArchive,
-  onDelete
+  onDelete,
+  onTogglePaid
 }: {
   project: SavedProject
   teamMembers: User[]
@@ -1850,6 +1892,7 @@ function KanbanCard({
   onEdit?: (project: SavedProject) => void
   onArchive?: (id: string) => Promise<void>
   onDelete?: (id: string) => Promise<void>
+  onTogglePaid?: (id: string) => Promise<void>
 }) {
   const {
     attributes,
@@ -1876,10 +1919,21 @@ function KanbanCard({
       {...listeners}
       className={`bg-white rounded-lg p-4 shadow-md cursor-move hover:shadow-lg transition-all ${
         isDragging || isSortableDragging ? 'opacity-50' : ''
+      } ${
+        project.paid 
+          ? 'border-2 border-green-500 bg-green-50' 
+          : 'border border-gray-200'
       }`}
     >
       <div className="mb-2">
-        <h3 className="font-semibold text-gray-800 text-sm mb-1">{project.projectName}</h3>
+        <div className="flex items-center justify-between mb-1">
+          <h3 className="font-semibold text-gray-800 text-sm">{project.projectName}</h3>
+          {project.paid && (
+            <span className="text-xs px-2 py-1 bg-green-500 text-white rounded-full font-medium">
+              ✓ Paid
+            </span>
+          )}
+        </div>
         {project.client && (
           <p className="text-xs text-gray-600 mb-1">Client: {project.client}</p>
         )}
@@ -1945,38 +1999,55 @@ function KanbanCard({
       )}
 
       {onEdit && onArchive && onDelete && (
-        <div className="flex gap-1 mt-2 pt-2 border-t border-gray-200">
-          <button
-            onClick={(e) => {
-              e.stopPropagation()
-              onEdit(project)
-            }}
-            className="flex-1 px-2 py-1 bg-indigo-600 text-white text-xs rounded hover:bg-indigo-700"
-          >
-            Edit
-          </button>
-          {!project.archived && (
+        <div className="flex flex-col gap-1 mt-2 pt-2 border-t border-gray-200">
+          {onTogglePaid && (
             <button
               onClick={(e) => {
                 e.stopPropagation()
-                onArchive(project.id)
+                onTogglePaid(project.id)
               }}
-              className="px-2 py-1 bg-yellow-600 text-white text-xs rounded hover:bg-yellow-700"
+              className={`w-full px-2 py-1.5 text-xs rounded font-medium transition-all ${
+                project.paid
+                  ? 'bg-green-600 text-white hover:bg-green-700'
+                  : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+              }`}
             >
-              Archive
+              {project.paid ? '✓ Mark as Not Paid' : 'Mark as Paid'}
             </button>
           )}
-          <button
-            onClick={(e) => {
-              e.stopPropagation()
-              if (confirm('Delete this project?')) {
-                onDelete(project.id)
-              }
-            }}
-            className="px-2 py-1 bg-red-600 text-white text-xs rounded hover:bg-red-700"
-          >
-            Delete
-          </button>
+          <div className="flex gap-1">
+            <button
+              onClick={(e) => {
+                e.stopPropagation()
+                onEdit(project)
+              }}
+              className="flex-1 px-2 py-1 bg-indigo-600 text-white text-xs rounded hover:bg-indigo-700"
+            >
+              Edit
+            </button>
+            {!project.archived && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onArchive(project.id)
+                }}
+                className="px-2 py-1 bg-yellow-600 text-white text-xs rounded hover:bg-yellow-700"
+              >
+                Archive
+              </button>
+            )}
+            <button
+              onClick={(e) => {
+                e.stopPropagation()
+                if (confirm('Delete this project?')) {
+                  onDelete(project.id)
+                }
+              }}
+              className="px-2 py-1 bg-red-600 text-white text-xs rounded hover:bg-red-700"
+            >
+              Delete
+            </button>
+          </div>
         </div>
       )}
     </div>

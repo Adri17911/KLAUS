@@ -42,6 +42,7 @@ export interface SavedProject {
   crmDealId?: string
   crmSyncedAt?: string
   client?: string
+  paid?: boolean
 }
 
 export interface User {
