@@ -553,17 +553,45 @@ function App() {
       font-size: 0.9em;
       text-align: center;
     }
+    .print-button {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      padding: 12px 24px;
+      background: #059669;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+      z-index: 1000;
+      transition: all 0.3s ease;
+    }
+    .print-button:hover {
+      background: #047857;
+      transform: translateY(-2px);
+      box-shadow: 0 6px 8px rgba(0, 0, 0, 0.15);
+    }
+    .print-button:active {
+      transform: translateY(0);
+    }
     @media print {
       body {
         padding: 20px;
       }
-      .no-print {
+      .no-print, .print-button {
         display: none;
       }
     }
   </style>
 </head>
 <body>
+  <button class="print-button" onclick="window.print()">
+    📄 Save as PDF
+  </button>
+  
   <h1>Commission Report</h1>
   
   <div class="report-header">
