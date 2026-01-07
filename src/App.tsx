@@ -1815,13 +1815,19 @@ function KanbanBoardView({
                 onEdit={onEdit}
                 onArchive={onArchive}
                 onDelete={onDelete}
+                onTogglePaid={onTogglePaid}
               />
             )
           })}
         </div>
         <DragOverlay>
           {activeProject ? (
-            <KanbanCard project={activeProject} teamMembers={teamMembers} isDragging />
+            <KanbanCard 
+              project={activeProject} 
+              teamMembers={teamMembers} 
+              isDragging
+              onTogglePaid={onTogglePaid}
+            />
           ) : null}
         </DragOverlay>
       </DndContext>
@@ -1838,7 +1844,8 @@ function KanbanColumn({
   teamMembers,
   onEdit,
   onArchive,
-  onDelete
+  onDelete,
+  onTogglePaid
 }: {
   id: string
   title: string
@@ -1848,6 +1855,7 @@ function KanbanColumn({
   onEdit: (project: SavedProject) => void
   onArchive: (id: string) => Promise<void>
   onDelete: (id: string) => Promise<void>
+  onTogglePaid?: (id: string) => Promise<void>
 }) {
   return (
     <div className={`${color} rounded-lg p-4 min-h-[500px]`}>
