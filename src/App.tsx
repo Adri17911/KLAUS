@@ -406,6 +406,237 @@ function App() {
     }
   }
 
+  // Generate commission report for in-progress projects
+  const generateCommissionReport = () => {
+    if (!user) {
+      showError('User not authenticated')
+      return
+    }
+
+    const currentUser = user // Store for use in template
+
+    // Filter projects with "in-progress" status
+    const inProgressProjects = savedProjects.filter(
+      (p: SavedProject) => p.status === 'in-progress' && !p.archived
+    )
+
+    if (inProgressProjects.length === 0) {
+      showWarning('No projects with "In Progress" status found. Move projects to "In Progress" on the Kanban board to include them in the report.')
+      return
+    }
+
+    // Calculate total commission
+    const totalCommission = inProgressProjects.reduce(
+      (sum: number, p: SavedProject) => sum + p.provision,
+      0
+    )
+
+    // Get current date
+    const reportDate = new Date().toLocaleDateString('cs-CZ', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+    })
+
+    // Generate HTML report
+    const reportHTML = `
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Commission Report - ${reportDate}</title>
+  <style>
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 40px 20px;
+      color: #333;
+      background: #fff;
+    }
+    h1 {
+      color: #4338ca;
+      border-bottom: 3px solid #6366f1;
+      padding-bottom: 10px;
+      margin-bottom: 30px;
+    }
+    .report-header {
+      margin-bottom: 30px;
+      padding: 20px;
+      background: #f8fafc;
+      border-left: 4px solid #6366f1;
+    }
+    .report-header p {
+      margin: 5px 0;
+      color: #64748b;
+    }
+    .summary {
+      background: #eff6ff;
+      padding: 20px;
+      border-radius: 8px;
+      margin-bottom: 30px;
+      border: 2px solid #3b82f6;
+    }
+    .summary h2 {
+      margin-top: 0;
+      color: #1e40af;
+    }
+    .total {
+      font-size: 24px;
+      font-weight: bold;
+      color: #1e40af;
+      margin-top: 10px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 30px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    thead {
+      background: #4338ca;
+      color: white;
+    }
+    th {
+      padding: 12px;
+      text-align: left;
+      font-weight: 600;
+    }
+    td {
+      padding: 12px;
+      border-bottom: 1px solid #e2e8f0;
+    }
+    tbody tr:hover {
+      background: #f8fafc;
+    }
+    .project-name {
+      font-weight: 600;
+      color: #1e293b;
+    }
+    .client-name {
+      color: #64748b;
+      font-size: 0.9em;
+    }
+    .commission {
+      font-weight: 600;
+      color: #059669;
+    }
+    .amount {
+      text-align: right;
+      font-family: 'Courier New', monospace;
+    }
+    .footer {
+      margin-top: 40px;
+      padding-top: 20px;
+      border-top: 2px solid #e2e8f0;
+      color: #64748b;
+      font-size: 0.9em;
+      text-align: center;
+    }
+    @media print {
+      body {
+        padding: 20px;
+      }
+      .no-print {
+        display: none;
+      }
+    }
+  </style>
+</head>
+<body>
+  <h1>Commission Report</h1>
+  
+  <div class="report-header">
+    <p><strong>Report Date:</strong> ${reportDate}</p>
+    <p><strong>Reported By:</strong> ${currentUser.name} (${currentUser.email})</p>
+    <p><strong>Number of Projects:</strong> ${inProgressProjects.length}</p>
+  </div>
+
+  <div class="summary">
+    <h2>Summary</h2>
+    <p>Total Commission to Claim:</p>
+    <div class="total">${totalCommission.toLocaleString('cs-CZ', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    })} CZK</div>
+  </div>
+
+  <h2>Projects in Progress</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Project Name</th>
+        <th>Client</th>
+        <th>Invoiced Amount</th>
+        <th>MDs</th>
+        <th>Commission (%)</th>
+        <th class="amount">Commission (CZK)</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${inProgressProjects
+        .map(
+          (project: SavedProject) => `
+        <tr>
+          <td>
+            <div class="project-name">${project.projectName}</div>
+            ${project.client ? `<div class="client-name">${project.client}</div>` : ''}
+          </td>
+          <td>${project.client || '-'}</td>
+          <td class="amount">
+            ${project.invoicedTotal} ${project.currency}
+            ${project.currency === 'EUR' ? `<br><span style="font-size: 0.85em; color: #64748b;">(${project.invoicedTotalCZK.toLocaleString('cs-CZ', {
+              minimumFractionDigits: 2,
+              maximumFractionDigits: 2,
+            })} CZK)</span>` : ''}
+          </td>
+          <td class="amount">${project.numberOfMDs || '-'}</td>
+          <td class="amount">${project.provisionPercent}%</td>
+          <td class="amount commission">${project.provision.toLocaleString('cs-CZ', {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2,
+          })} CZK</td>
+        </tr>
+      `
+        )
+        .join('')}
+    </tbody>
+    <tfoot>
+      <tr style="background: #f1f5f9; font-weight: bold;">
+        <td colspan="5" style="text-align: right;">Total Commission:</td>
+        <td class="amount commission" style="font-size: 1.1em;">${totalCommission.toLocaleString('cs-CZ', {
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2,
+        })} CZK</td>
+      </tr>
+    </tfoot>
+  </table>
+
+  <div class="footer">
+    <p>Generated on ${new Date().toLocaleString('cs-CZ')}</p>
+    <p>This report includes all projects with status "In Progress" from the Kanban board.</p>
+  </div>
+</body>
+</html>
+    `
+
+    // Open report in new window for printing/saving
+    const reportWindow = window.open('', '_blank')
+    if (reportWindow) {
+      reportWindow.document.write(reportHTML)
+      reportWindow.document.close()
+      
+      // Wait a bit for content to load, then focus the window
+      setTimeout(() => {
+        reportWindow.focus()
+        showSuccess('Commission report generated! You can print it or save as PDF from the browser.')
+      }, 100)
+    } else {
+      showError('Please allow pop-ups to generate the report.')
+    }
+  }
+
   // Archive project
   const handleArchive = async (id: string) => {
     try {
@@ -1174,8 +1405,20 @@ function App() {
           </div>
         ) : view === 'overview' ? (
           <div className="bg-white rounded-lg shadow-xl p-6 md:p-8 animate-fadeIn">
-            <h1 className="text-3xl font-bold text-gray-800 mb-2 animate-slideDown">Overview</h1>
-            <p className="text-gray-600 mb-6 animate-slideUp">Month-over-month performance and invoicing</p>
+            <div className="flex flex-col md:flex-row md:justify-between md:items-start mb-6 gap-4">
+              <div>
+                <h1 className="text-3xl font-bold text-gray-800 mb-2 animate-slideDown">Overview</h1>
+                <p className="text-gray-600 animate-slideUp">Month-over-month performance and invoicing</p>
+              </div>
+              <button
+                onClick={generateCommissionReport}
+                className="px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-all hover:scale-105 active:scale-95 shadow-md hover:shadow-lg font-medium flex items-center justify-center gap-2 whitespace-nowrap"
+                title="Generate commission report for all 'In Progress' projects"
+              >
+                <span>📄</span>
+                <span>Generate Commission Report</span>
+              </button>
+            </div>
 
             {/* Team Statistics (for Team Leaders and Admins) */}
             {(() => {
@@ -1296,11 +1539,16 @@ function App() {
               const totalToInvoice = activeProjects
                 .filter((p: SavedProject) => p.invoiceDueDate)
                 .reduce((sum: number, p: SavedProject) => sum + p.provision, 0)
+              
+              // Calculate commission to be paid out (total of all paid projects)
+              const commissionToBePaidOut = activeProjects
+                .filter((p: SavedProject) => p.paid === true)
+                .reduce((sum: number, p: SavedProject) => sum + p.provision, 0)
 
               return (
                 <div className="space-y-6">
                   {/* Summary Cards */}
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                     <div className="bg-indigo-50 p-4 rounded-lg border-2 border-indigo-200">
                       <p className="text-sm text-gray-600 mb-1">Total Provision</p>
                       <p className="text-2xl font-bold text-indigo-900">
@@ -1320,8 +1568,20 @@ function App() {
                       </p>
                     </div>
                     <div className="bg-green-50 p-4 rounded-lg border-2 border-green-200">
-                      <p className="text-sm text-gray-600 mb-1">Total Projects</p>
+                      <p className="text-sm text-gray-600 mb-1">Commission to be Paid Out</p>
                       <p className="text-2xl font-bold text-green-900">
+                        {commissionToBePaidOut.toLocaleString('cs-CZ', {
+                          minimumFractionDigits: 2,
+                          maximumFractionDigits: 2,
+                        })} CZK
+                      </p>
+                      <p className="text-xs text-gray-500 mt-1">
+                        ({activeProjects.filter((p: SavedProject) => p.paid === true).length} paid project{activeProjects.filter((p: SavedProject) => p.paid === true).length !== 1 ? 's' : ''})
+                      </p>
+                    </div>
+                    <div className="bg-purple-50 p-4 rounded-lg border-2 border-purple-200">
+                      <p className="text-sm text-gray-600 mb-1">Total Projects</p>
+                      <p className="text-2xl font-bold text-purple-900">
                         {activeProjects.length}
                       </p>
                     </div>
