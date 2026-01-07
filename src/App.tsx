@@ -1655,6 +1655,7 @@ function App() {
           <SettingsView
             provisionPercentages={provisionPercentages}
             setProvisionPercentages={setProvisionPercentages}
+            setSavedProjects={setSavedProjects}
           />
         ) : null}
       </div>
@@ -1790,7 +1791,7 @@ function KanbanBoardView({
 
 // Kanban Column Component
 function KanbanColumn({
-  id,
+  id: _id,
   title,
   color,
   projects,
@@ -2196,10 +2197,12 @@ function UserManagementView() {
 // Settings Component (Team Leader and Admin)
 function SettingsView({
   provisionPercentages,
-  setProvisionPercentages
+  setProvisionPercentages,
+  setSavedProjects
 }: {
   provisionPercentages: number[]
   setProvisionPercentages: (percentages: number[]) => void
+  setSavedProjects: React.Dispatch<React.SetStateAction<SavedProject[]>>
 }) {
   const [localPercentages, setLocalPercentages] = useState<string>('')
   const [loading, setLoading] = useState(false)

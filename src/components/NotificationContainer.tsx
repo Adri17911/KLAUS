@@ -1,4 +1,4 @@
-import { Notification, NotificationType } from './Notification'
+import { Notification } from './Notification'
 import NotificationItem from './Notification'
 
 interface NotificationContainerProps {

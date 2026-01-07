@@ -2,6 +2,9 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import * as api from '../api'
 
 // Mock fetch globally
+declare global {
+  var fetch: any
+}
 global.fetch = vi.fn()
 
 describe('API Service', () => {

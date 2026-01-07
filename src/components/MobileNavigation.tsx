@@ -14,7 +14,7 @@ export default function MobileNavigation({
   currentView,
   onNavigate,
   projectCount,
-  canManageUsers,
+  canManageUsers: _canManageUsers,
   canManageProvision,
   onSyncCrm,
   syncingCrm = false,
